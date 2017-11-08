@@ -33,12 +33,18 @@ unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e);
 #define MAX_BIP32_PATH 10
 #define MAX_USER_NAME 20
 
+#define ADA_COIN_TYPE 0x717
+#define ADA_ADDR_PATH_LEN 0x05
+#define BIP_44 0x2C
+#define HARDENED_BIP32 0x80000000
+
 #define CLA 0x80
 #define INS_GET_PUBLIC_KEY 0x02
 #define INS_SIGN_SSH_BLOB 0x04
 #define INS_SIGN_GENERIC_HASH 0x06
 #define INS_SIGN_DIRECT_HASH 0x08
 #define INS_GET_ECDH_SECRET 0x0A
+#define INS_GET_RND_PUB_KEY 0x0C
 #define P1_FIRST 0x00
 #define P1_NEXT 0x01
 #define P1_LAST_MARKER 0x80
@@ -821,6 +827,25 @@ uint32_t path_to_string(char *dest) {
     return offset;
 }
 
+uint32_t generate_random_hardened_index() {
+
+    uint32_t random_hardened_index = 0;
+
+    uint8_t tmp[4];
+    cx_rng(tmp, 4);
+    random_hardened_index = 0x80000000 |
+                        (tmp[0] << 24) |
+                        (tmp[1] << 16) |
+                        (tmp[2] << 8) |
+                         tmp[3];
+
+    return random_hardened_index;
+}
+
+
+
+
+
 unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e) {
     // Go back to the dashboard
     os_sched_exit(0);
@@ -1061,6 +1086,7 @@ unsigned short io_exchange_al(unsigned char channel, unsigned short tx_len) {
     return 0;
 }
 
+
 void sample_main(void) {
     volatile unsigned int rx = 0;
     volatile unsigned int tx = 0;
@@ -1094,6 +1120,72 @@ void sample_main(void) {
                 }
 
                 switch (G_io_apdu_buffer[1]) {
+                case INS_GET_RND_PUB_KEY: {
+                    uint8_t privateKeyData[32];
+                    uint32_t i;
+                    cx_ecfp_private_key_t privateKey;
+
+                    if ((G_io_apdu_buffer[OFFSET_P1] != 0) ||
+                        (G_io_apdu_buffer[OFFSET_P2] != P2_CURVE25519)) {
+                        THROW(0x6B00);
+                    }
+
+                    operationContext.pathLength = ADA_ADDR_PATH_LEN;
+                    operationContext.bip32Path[0] = BIP_44 | HARDENED_BIP32;
+                    operationContext.bip32Path[1] = ADA_COIN_TYPE |
+                                                    HARDENED_BIP32;
+                    /*
+                    //TODO: Call and store Wallet_Index based on Cardano scheme
+                    // for deducing what a valid index is, as this is not
+                    // normally 0.
+                    //
+                    // Path Depth 2 == Wallet Index
+                    */
+                    operationContext.bip32Path[2] = 0 | HARDENED_BIP32;
+                    // Path Depth 3 == Account Index - Hardcoded at 0 currently
+                    operationContext.bip32Path[3] = 0 | HARDENED_BIP32;
+                    operationContext.bip32Path[4] =
+                      generate_random_hardened_index();
+#if 0
+                    normalize_curve25519(privateKeyData);
+#endif
+
+#if CX_APILEVEL >= 5
+                    os_perso_derive_node_bip32(
+                        CX_CURVE_Ed25519, operationContext.bip32Path,
+                        operationContext.pathLength, privateKeyData, NULL);
+#else
+                    os_perso_derive_seed_bip32(operationContext.bip32Path,
+                                               operationContext.pathLength,
+                                               privateKeyData, NULL);
+#endif
+                    cx_ecfp_init_private_key(CX_CURVE_Ed25519, privateKeyData, 32,
+                                             &privateKey);
+#if ((CX_APILEVEL >= 5) && (CX_APILEVEL < 7))
+
+                    cx_ecfp_init_public_key(CX_CURVE_Ed25519, NULL, 0,
+                                                &operationContext.publicKey);
+                    cx_eddsa_get_public_key(&privateKey,
+                                                &operationContext.publicKey);
+#else
+                    cx_ecfp_generate_pair(CX_CURVE_Ed25519,
+                                          &operationContext.publicKey,
+                                          &privateKey, 1);
+#endif
+                    os_memset(&privateKey, 0, sizeof(privateKey));
+                    os_memset(privateKeyData, 0, sizeof(privateKeyData));
+                    path_to_string(keyPath);
+                    if (os_seph_features() &
+                        SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
+                        UX_DISPLAY(ui_address_blue, NULL);
+                    } else {
+                        UX_DISPLAY(ui_address_nanos, NULL);
+                    }
+                    flags |= IO_ASYNCH_REPLY;
+                }
+
+                break;
+
                 case INS_GET_PUBLIC_KEY: {
                     uint8_t privateKeyData[32];
                     uint32_t i;
