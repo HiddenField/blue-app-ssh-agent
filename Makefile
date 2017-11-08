@@ -20,11 +20,11 @@ $(error Environment variable BOLOS_SDK is not set)
 endif
 include $(BOLOS_SDK)/Makefile.defines
 
-APPNAME = "SSH/PGP Agent"
-APP_LOAD_PARAMS=--appFlags 0 --curve ed25519 --curve prime256r1 --path "44'/1815'" $(COMMON_LOAD_PARAMS) 
+APPNAME = "Cardano ADA"
+APP_LOAD_PARAMS=--appFlags 0 --curve ed25519 --curve prime256r1 --path "44'/1815'" $(COMMON_LOAD_PARAMS)
 APPVERSION_M=0
 APPVERSION_N=0
-APPVERSION_P=3
+APPVERSION_P=1
 APPVERSION=$(APPVERSION_M).$(APPVERSION_N).$(APPVERSION_P)
 
 ICONNAME=icon.gif

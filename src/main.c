@@ -116,7 +116,7 @@ bagl_element_t const ui_address_blue[] = {
      NULL},
     {{BAGL_LABEL, 0x00, 20, 0, 320, 60, 0, 0, BAGL_FILL, 0xFFFFFF, 0x1d2028,
       BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_MIDDLE, 0},
-     "SSH Agent",
+     "Cardano ADA",
      0,
      0,
      0,
@@ -198,7 +198,7 @@ static const bagl_element_t const ui_approval_ssh_blue[] = {
      NULL},
     {{BAGL_LABEL, 0x00, 20, 0, 320, 60, 0, 0, BAGL_FILL, 0xFFFFFF, 0x1d2028,
       BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_MIDDLE, 0},
-     "SSH Agent",
+     "Cardano ADA",
      0,
      0,
      0,
@@ -281,7 +281,7 @@ static const bagl_element_t const ui_approval_pgp_blue[] = {
      NULL},
     {{BAGL_LABEL, 0x00, 20, 0, 320, 60, 0, 0, BAGL_FILL, 0xFFFFFF, 0x1d2028,
       BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_MIDDLE, 0},
-     "PGP Agent",
+     "Cardano ADA",
      0,
      0,
      0,
@@ -364,7 +364,7 @@ static const bagl_element_t const ui_approval_pgp_ecdh_blue[] = {
      NULL},
     {{BAGL_LABEL, 0x00, 20, 0, 320, 60, 0, 0, BAGL_FILL, 0xFFFFFF, 0x1d2028,
       BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_MIDDLE, 0},
-     "PGP Agent",
+     "Cardano ADA",
      0,
      0,
      0,
@@ -447,7 +447,7 @@ static const bagl_element_t const ui_idle_blue[] = {
 
     {{BAGL_LABEL, 0x00, 20, 0, 320, 60, 0, 0, BAGL_FILL, 0xFFFFFF, 0x1d2028,
       BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_MIDDLE, 0},
-     "SSH Agent",
+     "Cardano ADA",
      0,
      0,
      0,
@@ -490,7 +490,7 @@ const bagl_element_t ui_idle_nanos[] = {
 
     {{BAGL_LABELINE, 0x00, 0, 12, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
       BAGL_FONT_OPEN_SANS_EXTRABOLD_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "SSH/PGP Agent",
+     "Cardano ADA",
      0,
      0,
      0,
@@ -530,7 +530,7 @@ const bagl_element_t ui_address_nanos[] = {
 
     {{BAGL_LABELINE, 0x01, 0, 12, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
       BAGL_FONT_OPEN_SANS_EXTRABOLD_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "SSH/PGP Agent",
+     "Cardano ADA",
      0,
      0,
      0,
@@ -584,7 +584,7 @@ const bagl_element_t ui_approval_ssh_nanos[] = {
 
     {{BAGL_LABELINE, 0x01, 0, 12, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
       BAGL_FONT_OPEN_SANS_EXTRABOLD_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "SSH Agent",
+     "Cardano ADA",
      0,
      0,
      0,
@@ -657,7 +657,7 @@ const bagl_element_t ui_approval_pgp_nanos[] = {
 
     {{BAGL_LABELINE, 0x01, 0, 12, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
       BAGL_FONT_OPEN_SANS_EXTRABOLD_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "PGP Agent",
+     "Cardano ADA",
      0,
      0,
      0,
@@ -711,7 +711,7 @@ const bagl_element_t ui_approval_pgp_ecdh_nanos[] = {
 
     {{BAGL_LABELINE, 0x01, 0, 12, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
       BAGL_FONT_OPEN_SANS_EXTRABOLD_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "PGP Agent",
+     "Cardano ADA",
      0,
      0,
      0,
@@ -1123,7 +1123,7 @@ void sample_main(void) {
                     if (G_io_apdu_buffer[OFFSET_P2] == P2_PRIME256) {
                         curve = CX_CURVE_256R1;
                     } else {
-#if 0                        
+#if 0
                         normalize_curve25519(privateKeyData);
 #endif
                         curve = CX_CURVE_Ed25519;
