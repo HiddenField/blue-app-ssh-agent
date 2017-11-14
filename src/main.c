@@ -45,6 +45,7 @@ unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e);
 #define INS_SIGN_DIRECT_HASH 0x08
 #define INS_GET_ECDH_SECRET 0x0A
 #define INS_GET_RND_PUB_KEY 0x0C
+#define INS_GET_PUB_KEY 0x0E
 #define P1_FIRST 0x00
 #define P1_NEXT 0x01
 #define P1_LAST_MARKER 0x80
@@ -86,6 +87,7 @@ typedef struct operationContext_t {
     bool direct;
     bool fullMessageHash;
     bool getPublicKey;
+    bool usePassedInIndex;
     uint8_t hashData[32];
     uint8_t lengthBuffer[4];
     uint8_t lengthOffset;
@@ -1129,10 +1131,23 @@ void sample_main(void) {
                 }
 
                 switch (G_io_apdu_buffer[1]) {
+
                 case INS_GET_RND_PUB_KEY: {
                     uint8_t privateKeyData[32];
                     uint32_t i;
                     cx_ecfp_private_key_t privateKey;
+                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA + 1;
+
+                    // Ada addresses are at a fixed depth of 5. Using the
+                    // input apdu length field to determine if an address index
+                    // has been passed in.
+                    operationContext.pathLength =
+                        G_io_apdu_buffer[OFFSET_CDATA];
+                    if ((operationContext.pathLength == 0x00)) {
+                        operationContext.usePassedInIndex = false;
+                    } else {
+                        operationContext.usePassedInIndex = true;
+                    }
 
                     if ((G_io_apdu_buffer[OFFSET_P1] != 0) ||
                         (G_io_apdu_buffer[OFFSET_P2] != P2_CURVE25519)) {
@@ -1154,8 +1169,16 @@ void sample_main(void) {
                     operationContext.bip32Path[2] = 0 | HARDENED_BIP32;
                     // Path Depth 3 == Account Index - Hardcoded at 0 currently
                     operationContext.bip32Path[3] = 0 | HARDENED_BIP32;
-                    operationContext.bip32Path[4] =
-                      generate_random_hardened_index();
+
+                    if(operationContext.usePassedInIndex) {
+                        operationContext.bip32Path[4] =
+                           (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
+                           (dataBuffer[2] << 8) | (dataBuffer[3]);
+                    } else {
+                        operationContext.bip32Path[4] =
+                        generate_random_hardened_index();
+                    }
+
 #if 0
                     normalize_curve25519(privateKeyData);
 #endif
