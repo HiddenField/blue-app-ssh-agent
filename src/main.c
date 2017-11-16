@@ -35,6 +35,7 @@ unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e);
 
 #define ADA_COIN_TYPE 0x717
 #define ADA_ADDR_PATH_LEN 0x05
+#define ADA_WALLET_PATH_LEN 0x03
 #define BIP_44 0x2C
 #define HARDENED_BIP32 0x80000000
 
@@ -45,7 +46,7 @@ unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e);
 #define INS_SIGN_DIRECT_HASH 0x08
 #define INS_GET_ECDH_SECRET 0x0A
 #define INS_GET_RND_PUB_KEY 0x0C
-#define INS_GET_PUB_KEY 0x0E
+#define INS_GET_WALLET_INDEX 0x0E
 #define P1_FIRST 0x00
 #define P1_NEXT 0x01
 #define P1_LAST_MARKER 0x80
@@ -845,9 +846,25 @@ uint32_t generate_random_hardened_index() {
     return random_hardened_index;
 }
 
+void derive_bip32_node_private_key(uint8_t *privateKeyData) {
 
+  // START Node Derivation
+  #if CX_APILEVEL >= 5
+      os_perso_derive_node_bip32(
+          CX_CURVE_Ed25519,
+          operationContext.bip32Path,
+          operationContext.pathLength,
+          privateKeyData,
+          operationContext.chainCode);
+  #else
+      os_perso_derive_seed_bip32(operationContext.bip32Path,
+                                 operationContext.pathLength,
+                                 privateKeyData,
+                                 operationContext.chainCode);
+  #endif
+  // END Node Derivation
 
-
+}
 
 unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e) {
     // Go back to the dashboard
@@ -1132,9 +1149,43 @@ void sample_main(void) {
 
                 switch (G_io_apdu_buffer[1]) {
 
-                case INS_GET_RND_PUB_KEY: {
+                case INS_GET_WALLET_INDEX: {
                     uint8_t privateKeyData[32];
                     uint32_t i;
+
+                    operationContext.pathLength = ADA_WALLET_PATH_LEN;
+
+                    operationContext.bip32Path[0] = BIP_44 | HARDENED_BIP32;
+                    operationContext.bip32Path[1] = ADA_COIN_TYPE |
+                                                    HARDENED_BIP32;
+
+                    for (i = 0; i < HARDENED_BIP32; i++) {
+
+                      operationContext.bip32Path[2] = i | HARDENED_BIP32;
+
+                      derive_bip32_node_private_key(privateKeyData);
+
+                      if(privateKeyData[31] == 0) {
+                          break;
+                      }
+                    }
+
+                    uint32_t tx = 0;
+                    G_io_apdu_buffer[tx++] = 4;
+                    os_memmove(G_io_apdu_buffer + tx, &i, 4);
+                    tx += 4;
+                    G_io_apdu_buffer[tx++] = 0x90;
+                    G_io_apdu_buffer[tx++] = 0x00;
+                    // Send back the response, do not restart the event loop
+                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+                    // Display back the original UX
+                    ui_idle();
+                }
+
+                break;
+
+                case INS_GET_RND_PUB_KEY: {
+                    uint8_t privateKeyData[32];
                     cx_ecfp_private_key_t privateKey;
                     uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA + 1;
 
@@ -1179,23 +1230,8 @@ void sample_main(void) {
                         generate_random_hardened_index();
                     }
 
-#if 0
-                    normalize_curve25519(privateKeyData);
-#endif
+                    derive_bip32_node_private_key(privateKeyData);
 
-#if CX_APILEVEL >= 5
-                    os_perso_derive_node_bip32(
-                        CX_CURVE_Ed25519,
-                        operationContext.bip32Path,
-                        operationContext.pathLength,
-                        privateKeyData,
-                        operationContext.chainCode);
-#else
-                    os_perso_derive_seed_bip32(operationContext.bip32Path,
-                                               operationContext.pathLength,
-                                               privateKeyData,
-                                               operationContext.chainCode);
-#endif
                     cx_ecfp_init_private_key(CX_CURVE_Ed25519,
                                               privateKeyData, 32,
                                               &privateKey);
@@ -1250,6 +1286,7 @@ void sample_main(void) {
                             (dataBuffer[2] << 8) | (dataBuffer[3]);
                         dataBuffer += 4;
                     }
+
                     if (G_io_apdu_buffer[OFFSET_P2] == P2_PRIME256) {
                         curve = CX_CURVE_256R1;
                     } else {
@@ -1258,20 +1295,12 @@ void sample_main(void) {
 #endif
                         curve = CX_CURVE_Ed25519;
                     }
-#if CX_APILEVEL >= 5
-                    os_perso_derive_node_bip32(
-                        curve, operationContext.bip32Path,
-                        operationContext.pathLength,
-                        privateKeyData,
-                        operationContext.chainCode);
-#else
-                    os_perso_derive_seed_bip32(operationContext.bip32Path,
-                                               operationContext.pathLength,
-                                               privateKeyData,
-                                               operationContext.chainCode);
-#endif
+
+                    curve = CX_CURVE_Ed25519;
+                    derive_bip32_node_private_key(privateKeyData);
                     cx_ecfp_init_private_key(curve, privateKeyData, 32,
                                              &privateKey);
+
 #if ((CX_APILEVEL >= 5) && (CX_APILEVEL < 7))
                     if (curve == CX_CURVE_Ed25519) {
                         cx_ecfp_init_public_key(curve, NULL, 0,
@@ -1286,6 +1315,7 @@ void sample_main(void) {
                     cx_ecfp_generate_pair(curve, &operationContext.publicKey,
                                           &privateKey, 1);
 #endif
+
                     os_memset(&privateKey, 0, sizeof(privateKey));
                     os_memset(privateKeyData, 0, sizeof(privateKeyData));
                     path_to_string(keyPath);
