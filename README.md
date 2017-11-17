@@ -1,25 +1,29 @@
-# blue-app-ssh-agent
+# Cardano App
 
-A simple PGP and SSH agent for Ledger Blue, supporting prime256v1 and ed25519 keys.
+A simple Cardano SL app for Ledger Nano S, supporting ed25519 derivation and keys.
 
-This agent is compatible with the third party SSH/PGP host client from Roman Zeyde available at https://github.com/romanz/trezor-agent - it is recommended to use it for extra functionalities
+This app is compatible with the Cardano-ledger-node-js-api client, currently forked on git@github.com:HiddenField/cardano-ledger-node-js-api.git
 
-You can also use the SSH functionalities with the following instructions using Python 2 :
+## Current instruction set available:
 
-Run getPublicKey.py to get the public key in SSH format, to be added to your authorized keys on the target
+
+| Get Public Key for a given derivation path | INS_GET_PUBLIC_KEY | 0x02 |
+| Generate random public key on 44'/1815'/[WALLET_INDEX]'/0'| INS_GET_RND_PUB_KEY | 0x0C |
+| Calculates and returns the Wallet Index | INS_GET_WALLET_INDEX | 0x0E |
+
+## APDU Breakdown
+
+See - doc/cardanoapp.asc
+
+## Building
+
+Environment setup and developer documentation is succinctly provided in Ledger’s Read the Docs [http://ledger.readthedocs.io/en/latest/].
+Fix’s Vagrant project is also very useful for setting up development environments off linux - Ledger Vagrant [https://github.com/fix/ledger-vagrant].
 
 ```
-python getPublicKey.py
-ecdsa-sha2-nistp256 AAAA....
+git clone repo
+
+make load
+
+make delete
 ```
-
-Run agent.py, providing the base64 encoded key retrieved earlier 
-
-```
-python agent.py --key AAAA....
-```
-
-Export the environment variables in your shell to use it
-
-You can also set the derivation path from the master seed by providing it with the --path parameter.
-
