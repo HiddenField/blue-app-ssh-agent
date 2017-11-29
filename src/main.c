@@ -1343,7 +1343,8 @@ void sample_main(void) {
                     uint8_t addr_checksum_tmp[4];
                     uint32_t addr_checksum;
                     uint8_t tx_amount_tmp[8];
-                    uint64_t tx_amount;
+                    uint32_t tx_amount_1;
+                    uint32_t tx_amount_2;
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
@@ -1463,18 +1464,19 @@ void sample_main(void) {
                                     offset++;
                                     uint8_t *checkSum = operationContext.message + offset;
                                     addr_checksum =
-                                        (checkSum[0] << 24) | (checkSum[1] << 16) |
-                                        (checkSum[2] << 8) | (checkSum[3]);
+                                        (checkSum[3] << 24) | (checkSum[2] << 16) |
+                                        (checkSum[1] << 8) | (checkSum[0]);
                                     offset += 4;
                                     //offset += cbor_deserialize_int64_t(&stream, offset, &addr_checksum);
                                     // Skip CBOR int type
                                     offset++;
                                     uint8_t *txAmount = operationContext.message + offset;
-                                    tx_amount =
-                                        (txAmount[0] << 56) | (txAmount[1] << 48) |
-                                        (txAmount[2] << 40) | (txAmount[3] << 32);
-                                        (txAmount[4] << 24) | (txAmount[5] << 16) |
-                                        (txAmount[6] << 8) | (txAmount[7]);
+                                    tx_amount_1 =
+                                        (txAmount[3] << 24) | (txAmount[2] << 16) |
+                                        (txAmount[1] << 8) | (txAmount[0]);
+                                    tx_amount_2 =
+                                        (txAmount[7] << 24) | (txAmount[6] << 16) |
+                                        (txAmount[5] << 8) | (txAmount[4]);
                                     offset += 8;
                                 } else {
                                     // TODO: Must throw here
@@ -1508,8 +1510,10 @@ void sample_main(void) {
                     os_memmove(G_io_apdu_buffer + tx, &addr_checksum, 4);
                     tx += 4;
                     G_io_apdu_buffer[tx++] = 0xFF;
-                    os_memmove(G_io_apdu_buffer + tx, &tx_amount, 8);
-                    tx += 8;
+                    os_memmove(G_io_apdu_buffer + tx, &tx_amount_1, 4);
+                    tx += 4;
+                    os_memmove(G_io_apdu_buffer + tx, &tx_amount_2, 4);
+                    tx += 4;
                     G_io_apdu_buffer[tx++] = 0x90;
                     G_io_apdu_buffer[tx++] = 0x00;
                     // Send back the response, do not restart the event loop
