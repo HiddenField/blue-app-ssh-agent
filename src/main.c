@@ -105,6 +105,9 @@ typedef struct operationContext_t {
     uint32_t messageLength;
     uint32_t transactionLength;
     uint32_t transactionOffset;
+    uint8_t finalUTXOCount;
+    uint32_t addressData[32];
+    uint32_t txAmountData[64];
 } operationContext_t;
 
 char keyPath[200];
@@ -1354,7 +1357,7 @@ void sample_main(void) {
                         (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
                     dataBuffer += 4;
 
-
+                    // First APDU -
                     if (p1 == P1_FIRST) {
                         // First APDU contains total transaction length
                         operationContext.transactionLength = dataLength;
@@ -1463,7 +1466,7 @@ void sample_main(void) {
                                     // Skip CBOR int type
                                     offset++;
                                     uint8_t *checkSum = operationContext.message + offset;
-                                    addr_checksum =
+                                    operationContext.addressData[otx_count-1] =
                                         (checkSum[3] << 24) | (checkSum[2] << 16) |
                                         (checkSum[1] << 8) | (checkSum[0]);
                                     offset += 4;
@@ -1471,10 +1474,11 @@ void sample_main(void) {
                                     // Skip CBOR int type
                                     offset++;
                                     uint8_t *txAmount = operationContext.message + offset;
-                                    tx_amount_1 =
+                                    uint8_t txAmountIndex = (otx_count - 1) * 2;
+                                    operationContext.txAmountData[txAmountIndex] =
                                         (txAmount[3] << 24) | (txAmount[2] << 16) |
                                         (txAmount[1] << 8) | (txAmount[0]);
-                                    tx_amount_2 =
+                                    operationContext.txAmountData[txAmountIndex + 1] =
                                         (txAmount[7] << 24) | (txAmount[6] << 16) |
                                         (txAmount[5] << 8) | (txAmount[4]);
                                     offset += 8;
@@ -1491,29 +1495,37 @@ void sample_main(void) {
                             THROW(0x6DDD);
                         }
 
+                        operationContext.finalUTXOCount = otx_count;
                         cbor_destroy(&stream);
                     }
 
                     uint32_t tx = 0;
 
-                    uint64_t output = addr_checksum;
+                    if(operationContext.fullMessageHash) {
 
-                    G_io_apdu_buffer[tx++] = 0xFF;
-                    //os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionLength, 4);
-                    //tx += 4;
-                    //os_memmove(G_io_apdu_buffer + tx, &dataLength, 4);
-                    //tx += 4;
-                    //os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionOffset, 4);
-                    //tx += 4;
-                    //os_memmove(G_io_apdu_buffer + tx, operationContext.message, 200);
-                    //tx += 200;
-                    os_memmove(G_io_apdu_buffer + tx, &addr_checksum, 4);
-                    tx += 4;
-                    G_io_apdu_buffer[tx++] = 0xFF;
-                    os_memmove(G_io_apdu_buffer + tx, &tx_amount_1, 4);
-                    tx += 4;
-                    os_memmove(G_io_apdu_buffer + tx, &tx_amount_2, 4);
-                    tx += 4;
+                        G_io_apdu_buffer[tx++] = &operationContext.finalUTXOCount;
+                        G_io_apdu_buffer[tx++] = 0xFF;
+
+                        for (int i=0; i < operationContext.finalUTXOCount; i++ ) {
+                          os_memmove(G_io_apdu_buffer + tx,
+                            &operationContext.addressData[i], 4);
+                          tx += 4;
+                          G_io_apdu_buffer[tx++] = 0xFF;
+                          os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i*2], 8);
+                          tx += 8;
+                          //os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i+1], 4);
+                          //tx += 4;
+                          G_io_apdu_buffer[tx++] = 0xFF;
+                        }
+                        //os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionLength, 4);
+                        //tx += 4;
+                        //os_memmove(G_io_apdu_buffer + tx, &dataLength, 4);
+                        //tx += 4;
+                        //os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionOffset, 4);
+                        //tx += 4;
+                        //os_memmove(G_io_apdu_buffer + tx, operationContext.message, 200);
+                        //tx += 200;
+                    }
                     G_io_apdu_buffer[tx++] = 0x90;
                     G_io_apdu_buffer[tx++] = 0x00;
                     // Send back the response, do not restart the event loop
