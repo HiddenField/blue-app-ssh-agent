@@ -15,6 +15,7 @@
 *  limitations under the License.
 ********************************************************************************/
 
+#include <cbor.h>
 #include "os.h"
 #include "cx.h"
 #include <stdbool.h>
@@ -32,6 +33,7 @@ unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e);
 
 #define MAX_BIP32_PATH 10
 #define MAX_USER_NAME 20
+#define MAX_CHUNK_SIZE 55
 
 #define ADA_COIN_TYPE 0x717
 #define ADA_ADDR_PATH_LEN 0x05
@@ -42,17 +44,21 @@ unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e);
 #define CLA 0x80
 #define INS_GET_PUBLIC_KEY 0x02
 #define INS_SIGN_SSH_BLOB 0x04
-#define INS_SIGN_GENERIC_HASH 0x06
+#define INS_SIGN_TX 0x06
 #define INS_SIGN_DIRECT_HASH 0x08
 #define INS_GET_ECDH_SECRET 0x0A
 #define INS_GET_RND_PUB_KEY 0x0C
 #define INS_GET_WALLET_INDEX 0x0E
-#define P1_FIRST 0x00
-#define P1_NEXT 0x01
+#define P1_FIRST 0x01
+#define P1_NEXT 0x02
 #define P1_LAST_MARKER 0x80
 #define P2_PRIME256 0x01
 #define P2_CURVE25519 0x02
+#define P2_RANDOM_INDEX 0x04
+#define P2_PASSED_IN_INDEX 0x06
 #define P2_PUBLIC_KEY_MARKER 0x80
+#define P2_SINGLE_TX 0x01
+#define P2_MULTI_TX 0x02
 
 #define OFFSET_CLA 0
 #define OFFSET_INS 1
@@ -74,7 +80,7 @@ ux_state_t ux;
 unsigned int ux_step;
 unsigned int ux_step_count;
 
-#define MAX_MSG 255
+#define MAX_MSG 1023
 
 typedef struct operationContext_t {
     uint8_t pathLength;
@@ -97,6 +103,8 @@ typedef struct operationContext_t {
     uint32_t userOffset;
     uint8_t message[MAX_MSG];
     uint32_t messageLength;
+    uint32_t transactionLength;
+    uint32_t transactionOffset;
 } operationContext_t;
 
 char keyPath[200];
@@ -1194,7 +1202,7 @@ void sample_main(void) {
                     // has been passed in.
                     operationContext.pathLength =
                         G_io_apdu_buffer[OFFSET_CDATA];
-                    if ((operationContext.pathLength == 0x00)) {
+                    if (operationContext.pathLength == 0x00) {
                         operationContext.usePassedInIndex = false;
                     } else {
                         operationContext.usePassedInIndex = true;
@@ -1330,313 +1338,184 @@ void sample_main(void) {
 
                 break;
 
-                case INS_SIGN_SSH_BLOB: {
+                case INS_SIGN_TX: {
+
+                    uint8_t addr_checksum_tmp[4];
+                    uint32_t addr_checksum;
+                    uint8_t tx_amount_tmp[8];
+                    uint64_t tx_amount;
+
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
                     uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
-                    bool getPublicKey = ((p2 & P2_PUBLIC_KEY_MARKER) != 0);
-                    p2 &= ~P2_PUBLIC_KEY_MARKER;
+                    uint32_t dataLength =
+                        (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
+                        (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
+                    dataBuffer += 4;
 
-                    if ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519)) {
-                        THROW(0x6B00);
-                    }
 
                     if (p1 == P1_FIRST) {
-                        uint32_t i;
-                        operationContext.pathLength = *dataBuffer;
-                        dataBuffer++;
-                        dataLength--;
-                        if ((operationContext.pathLength < 0x01) ||
-                            (operationContext.pathLength > MAX_BIP32_PATH)) {
-                            screen_printf("Invalid path\n");
-                            THROW(0x6a80);
+                        // First APDU contains total transaction length
+                        operationContext.transactionLength = dataLength;
+                        /*
+                        if(operationContext.messageLength != 314) {
+                            THROW(0x6B01);
                         }
-                        for (i = 0; i < operationContext.pathLength; i++) {
-                            operationContext.bip32Path[i] =
-                                (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-                                (dataBuffer[2] << 8) | (dataBuffer[3]);
-                            dataBuffer += 4;
-                            dataLength -= 4;
+                        */
+                        if(p2 = P2_MULTI_TX) {
+                            dataLength = MAX_CHUNK_SIZE;
+                        } else if (p2 != P2_SINGLE_TX) {
+                            THROW(0x6B02);
                         }
-                        operationContext.fullMessageHash =
-                            (p2 == P2_CURVE25519);
-                        operationContext.getPublicKey = getPublicKey;
-                        operationContext.messageLength = 0;
-                        if (!operationContext.fullMessageHash) {
-                            cx_sha256_init(&operationContext.hash);
-                        }
-                        operationContext.depth = 0;
-                        operationContext.readingElement = false;
-                        operationContext.lengthOffset = 0;
-                        operationContext.userOffset = 0;
-                        operationContext.direct = false;
-                    } else if (p1 != P1_NEXT) {
-                        THROW(0x6B00);
-                    }
-
-                    while (dataLength != 0) {
-                        if (operationContext.depth >= DEPTH_LAST) {
-                            THROW(0x6a80);
-                        }
-                        if (!operationContext.readingElement) {
-                            uint8_t available =
-                                (dataLength >
-                                         (4 - operationContext.lengthOffset)
-                                     ? (4 - operationContext.lengthOffset)
-                                     : dataLength);
-                            os_memmove(operationContext.lengthBuffer +
-                                           operationContext.lengthOffset,
-                                       dataBuffer, available);
-                            if (!operationContext.fullMessageHash) {
-                                cx_hash(&operationContext.hash.header, 0,
-                                        dataBuffer, available, NULL);
-                            } else {
-                                if ((operationContext.messageLength +
-                                     available) > MAX_MSG) {
-                                    THROW(0x6a80);
-                                }
-                                os_memmove(operationContext.message +
-                                               operationContext.messageLength,
-                                           dataBuffer, available);
-                                operationContext.messageLength += available;
-                            }
-                            dataBuffer += available;
-                            dataLength -= available;
-                            operationContext.lengthOffset += available;
-                            if (operationContext.lengthOffset == 4) {
-                                operationContext.lengthOffset = 0;
-                                operationContext.readingElement = true;
-                                operationContext.elementLength =
-                                    (operationContext.lengthBuffer[0] << 24) |
-                                    (operationContext.lengthBuffer[1] << 16) |
-                                    (operationContext.lengthBuffer[2] << 8) |
-                                    (operationContext.lengthBuffer[3]);
-                                // Fixups
-                                if ((operationContext.depth ==
-                                     DEPTH_REQUEST_1) ||
-                                    (operationContext.depth ==
-                                     DEPTH_REQUEST_2)) {
-                                    operationContext.elementLength++;
-                                }
-                            }
-                        }
-                        if (operationContext.readingElement) {
-                            uint32_t available =
-                                (dataLength > operationContext.elementLength
-                                     ? operationContext.elementLength
-                                     : dataLength);
-                            if (!operationContext.fullMessageHash) {
-                                cx_hash(&operationContext.hash.header, 0,
-                                        dataBuffer, available, NULL);
-                            } else {
-                                if ((operationContext.messageLength +
-                                     available) > MAX_MSG) {
-                                    THROW(0x6a80);
-                                }
-                                os_memmove(operationContext.message +
-                                               operationContext.messageLength,
-                                           dataBuffer, available);
-                                operationContext.messageLength += available;
-                            }
-                            if ((operationContext.depth == DEPTH_USER) &&
-                                (operationContext.userOffset < MAX_USER_NAME)) {
-                                uint32_t userAvailable =
-                                    ((operationContext.userOffset +
-                                      dataLength) > MAX_USER_NAME
-                                         ? (MAX_USER_NAME -
-                                            operationContext.userOffset)
-                                         : dataLength);
-                                os_memmove(operationContext.userName,
-                                           dataBuffer, userAvailable);
-                                operationContext.userOffset += userAvailable;
-                            }
-                            dataBuffer += available;
-                            dataLength -= available;
-                            operationContext.elementLength -= available;
-                            if (operationContext.elementLength == 0) {
-                                operationContext.readingElement = false;
-                                operationContext.depth++;
-                            }
-                        }
-                    }
-
-                    if (operationContext.depth != DEPTH_LAST) {
-                        THROW(0x9000);
-                    }
-
-                    if (operationContext.readingElement) {
-                        THROW(0x6a80);
-                    }
-
-                    operationContext.curve =
-                        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
-
-                    operationContext.userName[operationContext.userOffset] =
-                        '\0';
-                    path_to_string(keyPath);
-                    if (os_seph_features() &
-                        SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
-                        UX_DISPLAY(ui_approval_ssh_blue, NULL);
-                    } else {
-                        ux_step = 0;
-                        ux_step_count = 2;
-                        UX_DISPLAY(ui_approval_ssh_nanos,
-                                   ui_approval_ssh_prepro);
-                    }
-                    flags |= IO_ASYNCH_REPLY;
-                }
-
-                break;
-
-                case INS_SIGN_GENERIC_HASH: {
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
-                    bool last = ((p1 & P1_LAST_MARKER) != 0);
-                    p1 &= ~P1_LAST_MARKER;
-
-                    if ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519)) {
-                        THROW(0x6B00);
-                    }
-
-                    if (p1 == P1_FIRST) {
-                        uint32_t i;
-                        operationContext.pathLength = *dataBuffer;
-                        dataBuffer++;
-                        dataLength--;
-                        if ((operationContext.pathLength < 0x01) ||
-                            (operationContext.pathLength > MAX_BIP32_PATH)) {
-                            screen_printf("Invalid path\n");
-                            THROW(0x6a80);
-                        }
-                        for (i = 0; i < operationContext.pathLength; i++) {
-                            operationContext.bip32Path[i] =
-                                (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-                                (dataBuffer[2] << 8) | (dataBuffer[3]);
-                            dataBuffer += 4;
-                            dataLength -= 4;
-                        }
-                        cx_sha256_init(&operationContext.hash);
-                        operationContext.direct = false;
-                        operationContext.getPublicKey = false;
+                        operationContext.transactionOffset = 0;
                         operationContext.fullMessageHash = false;
                     } else if (p1 != P1_NEXT) {
                         THROW(0x6B00);
                     }
 
-                    cx_hash(&operationContext.hash.header, 0, dataBuffer,
-                            dataLength, NULL);
+                    //dataBuffer = G_io_apdu_buffer + OFFSET_LC + 4;
 
-                    if (!last) {
-                        THROW(0x9000);
-                    }
+                    os_memmove(operationContext.message +
+                                operationContext.transactionOffset,
+                               dataBuffer, dataLength);
 
-                    operationContext.curve =
-                        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
-                    path_to_string(keyPath);
-                    if (os_seph_features() &
-                        SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
-                        UX_DISPLAY(ui_approval_pgp_blue, NULL);
-                    } else {
-                        UX_DISPLAY(ui_approval_pgp_nanos, NULL);
-                    }
-                    flags |= IO_ASYNCH_REPLY;
-                }
+                    operationContext.transactionOffset += dataLength;
 
-                break;
-
-                case INS_SIGN_DIRECT_HASH: {
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
-                    uint32_t i;
-
-                    if ((p1 != 0) ||
-                        ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519))) {
-                        THROW(0x6B00);
+                    if(operationContext.transactionOffset ==
+                      operationContext.transactionLength
+                    ) {
+                        operationContext.fullMessageHash = true;
                     }
 
-                    operationContext.pathLength = *dataBuffer;
-                    dataBuffer++;
-                    dataLength--;
-                    if ((operationContext.pathLength < 0x01) ||
-                        (operationContext.pathLength > MAX_BIP32_PATH)) {
-                        screen_printf("Invalid path\n");
-                        THROW(0x6a80);
-                    }
-                    for (i = 0; i < operationContext.pathLength; i++) {
-                        operationContext.bip32Path[i] =
-                            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-                            (dataBuffer[2] << 8) | (dataBuffer[3]);
-                        dataBuffer += 4;
-                        dataLength -= 4;
-                    }
-                    if (dataLength != 32) {
-                        THROW(0x6700);
-                    }
-                    operationContext.direct = true;
-                    operationContext.getPublicKey = false;
-                    os_memmove(operationContext.hashData, dataBuffer, 32);
 
-                    operationContext.curve =
-                        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
-                    path_to_string(keyPath);
-                    if (os_seph_features() &
-                        SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
-                        UX_DISPLAY(ui_approval_pgp_blue, NULL);
-                    } else {
-                        UX_DISPLAY(ui_approval_pgp_nanos, NULL);
-                    }
-                    flags |= IO_ASYNCH_REPLY;
-                }
+                    if(operationContext.fullMessageHash) {
+                        cbor_stream_t stream;
+                        cbor_init(&stream, operationContext.message, dataLength);
 
-                break;
+                        uint8_t array_length;
+                        uint32_t int_value;
+                        bool at_tag = false;
+                        bool error = false;
+                        uint8_t itx_count = 0;
+                        uint8_t otx_count = 0;
 
-                case INS_GET_ECDH_SECRET: {
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
-                    uint32_t i;
+                        uint32_t offset = cbor_deserialize_array(&stream, 0, &array_length);
+                        if(offset != 1) { THROW(0x6DDE); }
 
-                    if ((p1 != 0x00) ||
-                        ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519))) {
-                        THROW(0x6B00);
+                        // Scan through Input TX and ensure they're valid
+                        if(cbor_deserialize_array_indefinite(&stream, offset) ) {
+                            offset++;
+                            while(!cbor_at_break(&stream, offset) && !error) {
+                                itx_count++;
+                                // TODO: These methods are returning 0 on the
+                                // Ledger. Work out why...
+                                //offset += cbor_deserialize_array(&stream, offset, &array_length);
+                                //offset += cbor_deserialize_int(&stream, offset, &int_value);
+                                // Skip tag
+                                offset += 4;
+                                if(operationContext.message[offset] == 0x58) {
+                                    array_length = operationContext.message[++offset];
+                                    //THROW(0xAA00 | array_length);
+                                    // Skip Array Length
+                                    offset += (array_length + 1);
+                                } else {
+                                    // TODO: Must throw here
+                                    error = true;
+
+                                    if(itx_count != 1) {
+                                        THROW(0x6E00 | operationContext.message[offset]);
+                                    }
+                                    THROW(0x6DDA);
+                                }
+                            }
+                            offset++;
+                        } else {
+                            // Invalid TX, must have at least one input
+                            // TODO: Must throw here
+                            error = true;
+                            THROW(0x6DDB);
+                        }
+
+                        // Scan through Output TXs
+                        size_t int_size;
+                        //int64_t addr_checksum;
+                        int new_offset = cbor_deserialize_array_indefinite(&stream, offset);
+
+                        if(cbor_deserialize_array_indefinite(&stream, offset) ) {
+                            offset ++;
+
+                            while(!cbor_at_break(&stream, offset) && !error) {
+                                otx_count++;
+                                // TODO: These methods are returning 0 on the
+                                // Ledger. Work out why...
+                                //offset += cbor_deserialize_array(&stream, offset, &array_length);
+                                //offset += cbor_deserialize_array(&stream, offset, &array_length);
+                                // Skip tag
+                                offset += 4;
+                                if(operationContext.message[offset] == 0x58) {
+                                    array_length = operationContext.message[++offset];
+                                    // Skip Array Length
+                                    offset += array_length +1;
+                                    // TODO: These methods are returning 0 on the
+                                    // Ledger. Work out why...
+                                    //offset += cbor_deserialize_int64_t(&stream, offset, &addr_checksum);
+                                    // Skip CBOR int type
+                                    offset++;
+                                    uint8_t *checkSum = operationContext.message + offset;
+                                    addr_checksum =
+                                        (checkSum[0] << 24) | (checkSum[1] << 16) |
+                                        (checkSum[2] << 8) | (checkSum[3]);
+                                    offset += 4;
+                                    //offset += cbor_deserialize_int64_t(&stream, offset, &addr_checksum);
+                                    // Skip CBOR int type
+                                    offset++;
+                                    uint8_t *txAmount = operationContext.message + offset;
+                                    tx_amount =
+                                        (txAmount[0] << 56) | (txAmount[1] << 48) |
+                                        (txAmount[2] << 40) | (txAmount[3] << 32);
+                                        (txAmount[4] << 24) | (txAmount[5] << 16) |
+                                        (txAmount[6] << 8) | (txAmount[7]);
+                                    offset += 8;
+                                } else {
+                                    // TODO: Must throw here
+                                    error = true;
+                                    THROW(0x6DDC);
+                                }
+                            }
+                        } else {
+                            // Invalid TX, must have at least one output
+                            // TODO: Must throw here
+                            error = true;
+                            THROW(0x6DDD);
+                        }
+
+                        cbor_destroy(&stream);
                     }
 
-                    operationContext.pathLength = *dataBuffer;
-                    dataBuffer++;
-                    dataLength--;
-                    if ((operationContext.pathLength < 0x01) ||
-                        (operationContext.pathLength > MAX_BIP32_PATH)) {
-                        screen_printf("Invalid path\n");
-                        THROW(0x6a80);
-                    }
-                    for (i = 0; i < operationContext.pathLength; i++) {
-                        operationContext.bip32Path[i] =
-                            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-                            (dataBuffer[2] << 8) | (dataBuffer[3]);
-                        dataBuffer += 4;
-                        dataLength -= 4;
-                    }
-                    if (dataLength != 65) {
-                        THROW(0x6700);
-                    }
-                    operationContext.curve =
-                        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
-                    cx_ecfp_init_public_key(operationContext.curve, dataBuffer,
-                                            65, &operationContext.publicKey);
-                    path_to_string(keyPath);
-                    if (os_seph_features() &
-                        SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
-                        UX_DISPLAY(ui_approval_pgp_ecdh_blue, NULL);
-                    } else {
-                        UX_DISPLAY(ui_approval_pgp_ecdh_nanos, NULL);
-                    }
-                    flags |= IO_ASYNCH_REPLY;
+                    uint32_t tx = 0;
+
+                    uint64_t output = addr_checksum;
+
+                    G_io_apdu_buffer[tx++] = 0xFF;
+                    //os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionLength, 4);
+                    //tx += 4;
+                    //os_memmove(G_io_apdu_buffer + tx, &dataLength, 4);
+                    //tx += 4;
+                    //os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionOffset, 4);
+                    //tx += 4;
+                    //os_memmove(G_io_apdu_buffer + tx, operationContext.message, 200);
+                    //tx += 200;
+                    os_memmove(G_io_apdu_buffer + tx, &addr_checksum, 4);
+                    tx += 4;
+                    G_io_apdu_buffer[tx++] = 0xFF;
+                    os_memmove(G_io_apdu_buffer + tx, &tx_amount, 8);
+                    tx += 8;
+                    G_io_apdu_buffer[tx++] = 0x90;
+                    G_io_apdu_buffer[tx++] = 0x00;
+                    // Send back the response, do not restart the event loop
+                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+                    // Display back the original UX
+                    ui_idle();
                 }
 
                 break;
