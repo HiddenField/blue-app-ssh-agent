@@ -105,7 +105,7 @@ typedef struct operationContext_t {
     uint8_t userName[MAX_USER_NAME + 1];
     uint32_t userOffset;
     uint8_t message[MAX_MSG];
-    uint64_t messageLength;
+    uint32_t messageLength;
     uint32_t transactionLength;
     uint32_t transactionOffset;
     uint8_t finalUTXOCount;
@@ -1510,7 +1510,7 @@ void sample_main(void) {
                                  NULL,
                                  0 );
                         if(error == 0) {
-                            THROW(0x6BAA);
+                            //THROW(0x6BAA);
                         } else if (error == -1) {
                             THROW(0x6BBB);
                         } else if (error == -2) {
@@ -1527,7 +1527,9 @@ void sample_main(void) {
 
                     uint32_t tx = 0;
                     if(operationContext.fullMessageHash) {
-                        G_io_apdu_buffer[tx++] = 0x20;
+                        G_io_apdu_buffer[tx++] = 0x20;                        
+                        os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionLength, 4);
+                        tx += 4;
                         os_memmove(G_io_apdu_buffer + tx, &operationContext.hashTX, 32);
                         tx += 32;
                     }

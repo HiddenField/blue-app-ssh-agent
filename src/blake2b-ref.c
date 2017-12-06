@@ -72,7 +72,7 @@ static void blake2b_increment_counter( blake2b_state *S, const uint64_t inc )
 static void blake2b_init0( blake2b_state *S )
 {
   size_t i;
-  memset( S, 0, sizeof( blake2b_state ) );
+  os_memset( S, 0, sizeof( blake2b_state ) );
 
   for( i = 0; i < 8; ++i ) S->h[i] = blake2b_IV[i];
 }
@@ -110,9 +110,9 @@ int blake2b_init( blake2b_state *S, size_t outlen )
   store32( &P->xof_length, 0 );
   P->node_depth    = 0;
   P->inner_length  = 0;
-  memset( P->reserved, 0, sizeof( P->reserved ) );
-  memset( P->salt,     0, sizeof( P->salt ) );
-  memset( P->personal, 0, sizeof( P->personal ) );
+  os_memset( P->reserved, 0, sizeof( P->reserved ) );
+  os_memset( P->salt,     0, sizeof( P->salt ) );
+  os_memset( P->personal, 0, sizeof( P->personal ) );
   return blake2b_init_param( S, P );
 }
 
@@ -134,16 +134,16 @@ int blake2b_init_key( blake2b_state *S, size_t outlen, const void *key, size_t k
   store32( &P->xof_length, 0 );
   P->node_depth    = 0;
   P->inner_length  = 0;
-  memset( P->reserved, 0, sizeof( P->reserved ) );
-  memset( P->salt,     0, sizeof( P->salt ) );
-  memset( P->personal, 0, sizeof( P->personal ) );
+  os_memset( P->reserved, 0, sizeof( P->reserved ) );
+  os_memset( P->salt,     0, sizeof( P->salt ) );
+  os_memset( P->personal, 0, sizeof( P->personal ) );
 
   if( blake2b_init_param( S, P ) < 0 ) return -1;
 
   {
     uint8_t block[BLAKE2B_BLOCKBYTES];
-    memset( block, 0, BLAKE2B_BLOCKBYTES );
-    memcpy( block, key, keylen );
+    os_memset( block, 0, BLAKE2B_BLOCKBYTES );
+    os_memmove( block, key, keylen );
     blake2b_update( S, block, BLAKE2B_BLOCKBYTES );
     secure_zero_memory( block, BLAKE2B_BLOCKBYTES ); /* Burn the key from stack */
   }
@@ -228,7 +228,7 @@ int blake2b_update( blake2b_state *S, const void *pin, size_t inlen )
     if( inlen > fill )
     {
       S->buflen = 0;
-      memcpy( S->buf + left, in, fill ); /* Fill buffer */
+      os_memmove( S->buf + left, in, fill ); /* Fill buffer */
       blake2b_increment_counter( S, BLAKE2B_BLOCKBYTES );
       blake2b_compress( S, S->buf ); /* Compress */
       in += fill; inlen -= fill;
@@ -239,7 +239,7 @@ int blake2b_update( blake2b_state *S, const void *pin, size_t inlen )
         inlen -= BLAKE2B_BLOCKBYTES;
       }
     }
-    memcpy( S->buf + S->buflen, in, inlen );
+    os_memmove( S->buf + S->buflen, in, inlen );
     S->buflen += inlen;
   } else {
     return -1;
@@ -260,14 +260,15 @@ int blake2b_final( blake2b_state *S, void *out, size_t outlen )
 
   blake2b_increment_counter( S, S->buflen );
   blake2b_set_lastblock( S );
-  memset( S->buf + S->buflen, 0, BLAKE2B_BLOCKBYTES - S->buflen ); /* Padding */
+  os_memset( S->buf + S->buflen, 0, BLAKE2B_BLOCKBYTES - S->buflen ); /* Padding */
   blake2b_compress( S, S->buf );
 
   for( i = 0; i < 8; ++i ) /* Output full hash to temp buffer */
     store64( buffer + sizeof( S->h[i] ) * i, S->h[i] );
 
-  memcpy( out, buffer, S->outlen );
-  secure_zero_memory(buffer, sizeof(buffer));
+  os_memmove( out, buffer, S->outlen );
+  //TODO: Replace with Ledger equivalent function.
+  //secure_zero_memory(buffer, sizeof(buffer));
   return 0;
 }
 
@@ -299,7 +300,6 @@ int blake2b( void *out, size_t outlen, const void *in, size_t inlen, const void 
   if(blake2b_update( S, ( const uint8_t * )in, inlen ) != 0 ) {
       return -2;
   }
-  return -4;
   if(blake2b_final( S, out, outlen ) != 0) {
       return -3;
   }
