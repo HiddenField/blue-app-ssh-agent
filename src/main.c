@@ -15,9 +15,12 @@
 *  limitations under the License.
 ********************************************************************************/
 
-#include <cbor.h>
+#include "cbor.h"
 #include "os.h"
 #include "cx.h"
+#include "blake2.h"
+#include "blake2-impl.h"
+
 #include <stdbool.h>
 
 #include "os_io_seproxyhal.h"
@@ -43,7 +46,7 @@ unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e);
 
 #define CLA 0x80
 #define INS_GET_PUBLIC_KEY 0x02
-#define INS_SIGN_SSH_BLOB 0x04
+#define INS_HASH 0x04
 #define INS_SIGN_TX 0x06
 #define INS_SIGN_DIRECT_HASH 0x08
 #define INS_GET_ECDH_SECRET 0x0A
@@ -102,12 +105,13 @@ typedef struct operationContext_t {
     uint8_t userName[MAX_USER_NAME + 1];
     uint32_t userOffset;
     uint8_t message[MAX_MSG];
-    uint32_t messageLength;
+    uint64_t messageLength;
     uint32_t transactionLength;
     uint32_t transactionOffset;
     uint8_t finalUTXOCount;
     uint32_t addressData[32];
     uint32_t txAmountData[64];
+    uint8_t hashTX[32];
 } operationContext_t;
 
 char keyPath[200];
@@ -842,6 +846,115 @@ uint32_t path_to_string(char *dest) {
     return offset;
 }
 
+void parse_cbor_transaction() {
+
+  cbor_stream_t stream;
+  cbor_init(&stream, operationContext.message, operationContext.transactionLength);
+
+  uint8_t array_length;
+  uint32_t int_value;
+  bool at_tag = false;
+  bool error = false;
+  uint8_t itx_count = 0;
+  uint8_t otx_count = 0;
+
+  uint32_t offset = cbor_deserialize_array(&stream, 0, &array_length);
+  if(offset != 1) { THROW(0x6DDE); }
+
+  // Scan through Input TX and ensure they're valid
+  if(cbor_deserialize_array_indefinite(&stream, offset) ) {
+      offset++;
+      while(!cbor_at_break(&stream, offset) && !error) {
+          itx_count++;
+          // TODO: These methods are returning 0 on the
+          // Ledger. Work out why...
+          //offset += cbor_deserialize_array(&stream, offset, &array_length);
+          //offset += cbor_deserialize_int(&stream, offset, &int_value);
+          // Skip tag
+          offset += 4;
+          if(operationContext.message[offset] == 0x58) {
+              array_length = operationContext.message[++offset];
+              //THROW(0xAA00 | array_length);
+              // Skip Array Length
+              offset += (array_length + 1);
+          } else {
+              // TODO: Must throw here
+              error = true;
+
+              if(itx_count != 1) {
+                  THROW(0x6E00 | operationContext.message[offset]);
+              }
+              THROW(0x6DDA);
+          }
+      }
+      offset++;
+  } else {
+      // Invalid TX, must have at least one input
+      // TODO: Must throw here
+      error = true;
+      THROW(0x6DDB);
+  }
+
+  // Scan through Output TXs
+  size_t int_size;
+  //int64_t addr_checksum;
+  int new_offset = cbor_deserialize_array_indefinite(&stream, offset);
+
+  if(cbor_deserialize_array_indefinite(&stream, offset) ) {
+      offset ++;
+
+      while(!cbor_at_break(&stream, offset) && !error) {
+          otx_count++;
+          // TODO: These methods are returning 0 on the
+          // Ledger. Work out why...
+          //offset += cbor_deserialize_array(&stream, offset, &array_length);
+          //offset += cbor_deserialize_array(&stream, offset, &array_length);
+          // Skip tag
+          offset += 4;
+          if(operationContext.message[offset] == 0x58) {
+              array_length = operationContext.message[++offset];
+              // Skip Array Length
+              offset += array_length +1;
+              // TODO: These methods are returning 0 on the
+              // Ledger. Work out why...
+              //offset += cbor_deserialize_int64_t(&stream, offset, &addr_checksum);
+              // Skip CBOR int type
+              offset++;
+              uint8_t *checkSum = operationContext.message + offset;
+              operationContext.addressData[otx_count-1] =
+                  (checkSum[3] << 24) | (checkSum[2] << 16) |
+                  (checkSum[1] << 8) | (checkSum[0]);
+              offset += 4;
+              //offset += cbor_deserialize_int64_t(&stream, offset, &addr_checksum);
+              // Skip CBOR int type
+              offset++;
+              uint8_t *txAmount = operationContext.message + offset;
+              uint8_t txAmountIndex = (otx_count - 1) * 2;
+              operationContext.txAmountData[txAmountIndex] =
+                  (txAmount[3] << 24) | (txAmount[2] << 16) |
+                  (txAmount[1] << 8) | (txAmount[0]);
+              operationContext.txAmountData[txAmountIndex + 1] =
+                  (txAmount[7] << 24) | (txAmount[6] << 16) |
+                  (txAmount[5] << 8) | (txAmount[4]);
+              offset += 8;
+          } else {
+              // TODO: Must throw here
+              error = true;
+              THROW(0x6DDC);
+          }
+      }
+  } else {
+      // Invalid TX, must have at least one output
+      // TODO: Must throw here
+      error = true;
+      THROW(0x6DDD);
+  }
+
+  operationContext.finalUTXOCount = otx_count;
+  cbor_destroy(&stream);
+
+}
+
 uint32_t generate_random_hardened_index() {
 
     uint32_t random_hardened_index = 0;
@@ -1341,6 +1454,103 @@ void sample_main(void) {
 
                 break;
 
+
+
+                case INS_HASH: {
+
+                    uint8_t addr_checksum_tmp[4];
+                    uint32_t addr_checksum;
+                    uint8_t tx_amount_tmp[8];
+                    uint32_t tx_amount_1;
+                    uint32_t tx_amount_2;
+
+                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
+                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
+                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+                    uint32_t dataLength =
+                        (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
+                        (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
+                    dataBuffer += 4;
+
+                    // First APDU -
+                    if (p1 == P1_FIRST) {
+                        // First APDU contains total transaction length
+                        operationContext.transactionLength = dataLength;
+
+                        if(p2 = P2_MULTI_TX) {
+                            dataLength = MAX_CHUNK_SIZE;
+                        } else if (p2 != P2_SINGLE_TX) {
+                            THROW(0x6B02);
+                        }
+                        operationContext.transactionOffset = 0;
+                        operationContext.fullMessageHash = false;
+                    } else if (p1 != P1_NEXT) {
+                        THROW(0x6B00);
+                    }
+
+                    os_memmove(operationContext.message +
+                                operationContext.transactionOffset,
+                               dataBuffer, dataLength);
+
+                    operationContext.transactionOffset += dataLength;
+
+                    if(operationContext.transactionOffset ==
+                      operationContext.transactionLength
+                    ) {
+                        operationContext.fullMessageHash = true;
+                    }
+
+
+                    if(operationContext.fullMessageHash) {
+                        parse_cbor_transaction();
+                        int error = blake2b( operationContext.hashTX,
+                                 32,
+                                 operationContext.message,
+                                 operationContext.transactionLength,
+                                 NULL,
+                                 0 );
+                        if(error == 0) {
+                            THROW(0x6BAA);
+                        } else if (error == -1) {
+                            THROW(0x6BBB);
+                        } else if (error == -2) {
+                            THROW(0x6BCC);
+                        } else if (error == -3) {
+                            THROW(0x6BDD);
+                        } else if (error == -4) {
+                            THROW(0x6BEE);
+                        } else {
+                            THROW(0x6BFF);
+                        }
+
+                    }
+
+                    uint32_t tx = 0;
+                    if(operationContext.fullMessageHash) {
+                        G_io_apdu_buffer[tx++] = 0x20;
+                        os_memmove(G_io_apdu_buffer + tx, &operationContext.hashTX, 32);
+                        tx += 32;
+                    }
+
+                    G_io_apdu_buffer[tx++] = 0x90;
+                    G_io_apdu_buffer[tx++] = 0x00;
+                    // Send back the response, do not restart the event loop
+                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+                    // Display back the original UX
+                    ui_idle();
+                }
+
+                break;
+
+
+
+
+
+
+
+
+
+
                 case INS_SIGN_TX: {
 
                     uint8_t addr_checksum_tmp[4];
@@ -1393,110 +1603,7 @@ void sample_main(void) {
 
 
                     if(operationContext.fullMessageHash) {
-                        cbor_stream_t stream;
-                        cbor_init(&stream, operationContext.message, dataLength);
-
-                        uint8_t array_length;
-                        uint32_t int_value;
-                        bool at_tag = false;
-                        bool error = false;
-                        uint8_t itx_count = 0;
-                        uint8_t otx_count = 0;
-
-                        uint32_t offset = cbor_deserialize_array(&stream, 0, &array_length);
-                        if(offset != 1) { THROW(0x6DDE); }
-
-                        // Scan through Input TX and ensure they're valid
-                        if(cbor_deserialize_array_indefinite(&stream, offset) ) {
-                            offset++;
-                            while(!cbor_at_break(&stream, offset) && !error) {
-                                itx_count++;
-                                // TODO: These methods are returning 0 on the
-                                // Ledger. Work out why...
-                                //offset += cbor_deserialize_array(&stream, offset, &array_length);
-                                //offset += cbor_deserialize_int(&stream, offset, &int_value);
-                                // Skip tag
-                                offset += 4;
-                                if(operationContext.message[offset] == 0x58) {
-                                    array_length = operationContext.message[++offset];
-                                    //THROW(0xAA00 | array_length);
-                                    // Skip Array Length
-                                    offset += (array_length + 1);
-                                } else {
-                                    // TODO: Must throw here
-                                    error = true;
-
-                                    if(itx_count != 1) {
-                                        THROW(0x6E00 | operationContext.message[offset]);
-                                    }
-                                    THROW(0x6DDA);
-                                }
-                            }
-                            offset++;
-                        } else {
-                            // Invalid TX, must have at least one input
-                            // TODO: Must throw here
-                            error = true;
-                            THROW(0x6DDB);
-                        }
-
-                        // Scan through Output TXs
-                        size_t int_size;
-                        //int64_t addr_checksum;
-                        int new_offset = cbor_deserialize_array_indefinite(&stream, offset);
-
-                        if(cbor_deserialize_array_indefinite(&stream, offset) ) {
-                            offset ++;
-
-                            while(!cbor_at_break(&stream, offset) && !error) {
-                                otx_count++;
-                                // TODO: These methods are returning 0 on the
-                                // Ledger. Work out why...
-                                //offset += cbor_deserialize_array(&stream, offset, &array_length);
-                                //offset += cbor_deserialize_array(&stream, offset, &array_length);
-                                // Skip tag
-                                offset += 4;
-                                if(operationContext.message[offset] == 0x58) {
-                                    array_length = operationContext.message[++offset];
-                                    // Skip Array Length
-                                    offset += array_length +1;
-                                    // TODO: These methods are returning 0 on the
-                                    // Ledger. Work out why...
-                                    //offset += cbor_deserialize_int64_t(&stream, offset, &addr_checksum);
-                                    // Skip CBOR int type
-                                    offset++;
-                                    uint8_t *checkSum = operationContext.message + offset;
-                                    operationContext.addressData[otx_count-1] =
-                                        (checkSum[3] << 24) | (checkSum[2] << 16) |
-                                        (checkSum[1] << 8) | (checkSum[0]);
-                                    offset += 4;
-                                    //offset += cbor_deserialize_int64_t(&stream, offset, &addr_checksum);
-                                    // Skip CBOR int type
-                                    offset++;
-                                    uint8_t *txAmount = operationContext.message + offset;
-                                    uint8_t txAmountIndex = (otx_count - 1) * 2;
-                                    operationContext.txAmountData[txAmountIndex] =
-                                        (txAmount[3] << 24) | (txAmount[2] << 16) |
-                                        (txAmount[1] << 8) | (txAmount[0]);
-                                    operationContext.txAmountData[txAmountIndex + 1] =
-                                        (txAmount[7] << 24) | (txAmount[6] << 16) |
-                                        (txAmount[5] << 8) | (txAmount[4]);
-                                    offset += 8;
-                                } else {
-                                    // TODO: Must throw here
-                                    error = true;
-                                    THROW(0x6DDC);
-                                }
-                            }
-                        } else {
-                            // Invalid TX, must have at least one output
-                            // TODO: Must throw here
-                            error = true;
-                            THROW(0x6DDD);
-                        }
-
-                        operationContext.finalUTXOCount = otx_count;
-                        cbor_destroy(&stream);
+                        parse_cbor_transaction();
                     }
 
                     uint32_t tx = 0;
