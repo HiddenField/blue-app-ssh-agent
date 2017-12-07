@@ -37,6 +37,7 @@ unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e);
 #define MAX_BIP32_PATH 10
 #define MAX_USER_NAME 20
 #define MAX_CHUNK_SIZE 55
+#define MAX_MSG 1023
 
 #define ADA_COIN_TYPE 0x717
 #define ADA_ADDR_PATH_LEN 0x05
@@ -48,18 +49,13 @@ unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e);
 #define INS_GET_PUBLIC_KEY 0x02
 #define INS_HASH 0x04
 #define INS_SIGN_TX 0x06
-#define INS_SIGN_DIRECT_HASH 0x08
-#define INS_GET_ECDH_SECRET 0x0A
 #define INS_GET_RND_PUB_KEY 0x0C
 #define INS_GET_WALLET_INDEX 0x0E
 #define P1_FIRST 0x01
 #define P1_NEXT 0x02
-#define P1_LAST_MARKER 0x80
-#define P2_PRIME256 0x01
 #define P2_CURVE25519 0x02
 #define P2_RANDOM_INDEX 0x04
 #define P2_PASSED_IN_INDEX 0x06
-#define P2_PUBLIC_KEY_MARKER 0x80
 #define P2_SINGLE_TX 0x01
 #define P2_MULTI_TX 0x02
 
@@ -70,11 +66,6 @@ unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e);
 #define OFFSET_LC 4
 #define OFFSET_CDATA 5
 
-#define DEPTH_REQUEST_1 0
-#define DEPTH_REQUEST_2 3
-#define DEPTH_USER 1
-#define DEPTH_LAST 6
-
 unsigned char G_io_seproxyhal_spi_buffer[IO_SEPROXYHAL_BUFFER_SIZE_B];
 
 ux_state_t ux;
@@ -83,48 +74,19 @@ ux_state_t ux;
 unsigned int ux_step;
 unsigned int ux_step_count;
 
-#define MAX_MSG 1023
-
-
-uint8_t testTX[] = {
-  0x83, 0x9f, 0x82, 0x00, 0xd8, 0x18, 0x58, 0x26,
-  0x82, 0x58, 0x20, 0xde, 0x31, 0x51, 0xa2, 0xd9,
-  0xcd, 0x8e, 0x2b, 0xbe, 0x29, 0x2a, 0x61, 0x53,
-  0xd6, 0x79, 0xd1, 0x23, 0x89, 0x2d, 0xdc, 0xfb,
-  0xee, 0x86, 0x9c, 0x47, 0x32, 0xa5, 0xc5, 0x04,
-  0xa7, 0x55, 0x4d, 0x19, 0x38, 0x6c, 0xff, 0x9f,
-  0x82, 0x82, 0xd8, 0x18, 0x58, 0x21, 0x83, 0x58,
-  0x1c, 0xae, 0xb1, 0x53, 0xa5, 0x80, 0x9a, 0x08,
-  0x45, 0x07, 0x85, 0x4c, 0x9f, 0x3e, 0x57, 0x95,
-  0xbc, 0xca, 0x89, 0x78, 0x1f, 0x9c, 0x38, 0x6d,
-  0x95, 0x77, 0x48, 0xcd, 0x42, 0xa0, 0x00, 0x1a,
-  0x87, 0x23, 0x6a, 0x1f, 0x1b, 0x00, 0x78, 0x0a,
-  0xa6, 0xc7, 0xd6, 0x21, 0x10, 0xff, 0xa0
-};
-
-size_t txlen = sizeof(testTX);
-
-
-
 typedef struct operationContext_t {
     uint8_t pathLength;
     uint32_t bip32Path[MAX_BIP32_PATH];
-    cx_sha256_t hash;
     cx_ecfp_public_key_t publicKey;
     cx_curve_t curve;
+    cx_sha256_t hash;
     unsigned char chainCode[32];
-    uint8_t depth;
-    bool readingElement;
     bool direct;
     bool fullMessageHash;
     bool getPublicKey;
     bool usePassedInIndex;
     uint8_t hashData[32];
-    uint8_t lengthBuffer[4];
-    uint8_t lengthOffset;
-    uint32_t elementLength;
-    uint8_t userName[MAX_USER_NAME + 1];
-    uint32_t userOffset;
+    uint8_t userName[MAX_USER_NAME + 1]; // TODO: Remove
     uint8_t message[MAX_MSG];
     uint32_t messageLength;
     uint64_t transactionLength;
@@ -1420,11 +1382,13 @@ void sample_main(void) {
                         THROW(0x6a80);
                     }
 
+                    // Ensure ED25519 Curve is being requested
                     if ((G_io_apdu_buffer[OFFSET_P1] != 0) ||
-                        ((G_io_apdu_buffer[OFFSET_P2] != P2_PRIME256) &&
-                         (G_io_apdu_buffer[OFFSET_P2] != P2_CURVE25519))) {
+                        ((G_io_apdu_buffer[OFFSET_P2] != P2_CURVE25519))) {
                         THROW(0x6B00);
                     }
+
+                    // Get BIP32 address being requested
                     for (i = 0; i < operationContext.pathLength; i++) {
                         operationContext.bip32Path[i] =
                             (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
@@ -1432,16 +1396,9 @@ void sample_main(void) {
                         dataBuffer += 4;
                     }
 
-                    if (G_io_apdu_buffer[OFFSET_P2] == P2_PRIME256) {
-                        curve = CX_CURVE_256R1;
-                    } else {
-#if 0
-                        normalize_curve25519(privateKeyData);
-#endif
-                        curve = CX_CURVE_Ed25519;
-                    }
-
+                    // Set Curve
                     curve = CX_CURVE_Ed25519;
+
                     derive_bip32_node_private_key(privateKeyData);
                     cx_ecfp_init_private_key(curve, privateKeyData, 32,
                                              &privateKey);
