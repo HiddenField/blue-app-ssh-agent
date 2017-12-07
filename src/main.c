@@ -85,6 +85,27 @@ unsigned int ux_step_count;
 
 #define MAX_MSG 1023
 
+
+uint8_t testTX[] = {
+  0x83, 0x9f, 0x82, 0x00, 0xd8, 0x18, 0x58, 0x26,
+  0x82, 0x58, 0x20, 0xde, 0x31, 0x51, 0xa2, 0xd9,
+  0xcd, 0x8e, 0x2b, 0xbe, 0x29, 0x2a, 0x61, 0x53,
+  0xd6, 0x79, 0xd1, 0x23, 0x89, 0x2d, 0xdc, 0xfb,
+  0xee, 0x86, 0x9c, 0x47, 0x32, 0xa5, 0xc5, 0x04,
+  0xa7, 0x55, 0x4d, 0x19, 0x38, 0x6c, 0xff, 0x9f,
+  0x82, 0x82, 0xd8, 0x18, 0x58, 0x21, 0x83, 0x58,
+  0x1c, 0xae, 0xb1, 0x53, 0xa5, 0x80, 0x9a, 0x08,
+  0x45, 0x07, 0x85, 0x4c, 0x9f, 0x3e, 0x57, 0x95,
+  0xbc, 0xca, 0x89, 0x78, 0x1f, 0x9c, 0x38, 0x6d,
+  0x95, 0x77, 0x48, 0xcd, 0x42, 0xa0, 0x00, 0x1a,
+  0x87, 0x23, 0x6a, 0x1f, 0x1b, 0x00, 0x78, 0x0a,
+  0xa6, 0xc7, 0xd6, 0x21, 0x10, 0xff, 0xa0
+};
+
+size_t txlen = sizeof(testTX);
+
+
+
 typedef struct operationContext_t {
     uint8_t pathLength;
     uint32_t bip32Path[MAX_BIP32_PATH];
@@ -106,7 +127,7 @@ typedef struct operationContext_t {
     uint32_t userOffset;
     uint8_t message[MAX_MSG];
     uint32_t messageLength;
-    uint32_t transactionLength;
+    uint64_t transactionLength;
     uint32_t transactionOffset;
     uint8_t finalUTXOCount;
     uint32_t addressData[32];
@@ -1506,7 +1527,9 @@ void sample_main(void) {
                         int error = blake2b( operationContext.hashTX,
                                  32,
                                  operationContext.message,
+                                 //testTX,
                                  operationContext.transactionLength,
+                                 //20,
                                  NULL,
                                  0 );
                         if(error == 0) {
@@ -1527,9 +1550,9 @@ void sample_main(void) {
 
                     uint32_t tx = 0;
                     if(operationContext.fullMessageHash) {
-                        G_io_apdu_buffer[tx++] = 0x20;                        
-                        os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionLength, 4);
-                        tx += 4;
+                        G_io_apdu_buffer[tx++] = 0x20;
+                        //os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionLength, 8);
+                        //tx += 8;
                         os_memmove(G_io_apdu_buffer + tx, &operationContext.hashTX, 32);
                         tx += 32;
                     }
