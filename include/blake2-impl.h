@@ -34,7 +34,7 @@ static BLAKE2_INLINE uint32_t load32( const void *src )
 {
 #if defined(NATIVE_LITTLE_ENDIAN)
   uint32_t w;
-  memcpy(&w, src, sizeof w);
+  os_memmove(&w, src, sizeof w);
   return w;
 #else
   const uint8_t *p = ( const uint8_t * )src;
@@ -49,7 +49,7 @@ static BLAKE2_INLINE uint64_t load64( const void *src )
 {
 #if defined(NATIVE_LITTLE_ENDIAN)
   uint64_t w;
-  memcpy(&w, src, sizeof w);
+  os_memmove(&w, src, sizeof w);
   return w;
 #else
   const uint8_t *p = ( const uint8_t * )src;
@@ -68,7 +68,7 @@ static BLAKE2_INLINE uint16_t load16( const void *src )
 {
 #if defined(NATIVE_LITTLE_ENDIAN)
   uint16_t w;
-  memcpy(&w, src, sizeof w);
+  os_memmove(&w, src, sizeof w);
   return w;
 #else
   const uint8_t *p = ( const uint8_t * )src;
@@ -80,7 +80,7 @@ static BLAKE2_INLINE uint16_t load16( const void *src )
 static BLAKE2_INLINE void store16( void *dst, uint16_t w )
 {
 #if defined(NATIVE_LITTLE_ENDIAN)
-  memcpy(dst, &w, sizeof w);
+  os_memmove(dst, &w, sizeof w);
 #else
   uint8_t *p = ( uint8_t * )dst;
   *p++ = ( uint8_t )w; w >>= 8;
@@ -91,7 +91,7 @@ static BLAKE2_INLINE void store16( void *dst, uint16_t w )
 static BLAKE2_INLINE void store32( void *dst, uint32_t w )
 {
 #if defined(NATIVE_LITTLE_ENDIAN)
-  memcpy(dst, &w, sizeof w);
+  os_memmove(dst, &w, sizeof w);
 #else
   uint8_t *p = ( uint8_t * )dst;
   p[0] = (uint8_t)(w >>  0);
@@ -104,7 +104,7 @@ static BLAKE2_INLINE void store32( void *dst, uint32_t w )
 static BLAKE2_INLINE void store64( void *dst, uint64_t w )
 {
 #if defined(NATIVE_LITTLE_ENDIAN)
-  memcpy(dst, &w, sizeof w);
+  os_memmove(dst, &w, sizeof w);
 #else
   uint8_t *p = ( uint8_t * )dst;
   p[0] = (uint8_t)(w >>  0);
