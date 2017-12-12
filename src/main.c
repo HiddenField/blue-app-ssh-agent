@@ -27,12 +27,16 @@
 #include "string.h"
 
 unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e);
-unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e);
-unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_address_ok(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_address_cancel(const bagl_element_t *e);
-unsigned int io_seproxyhal_touch_ecdh_ok(const bagl_element_t *e);
-unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e);
+unsigned int io_seproxyhal_touch_preview_ok(const bagl_element_t *e);
+unsigned int io_seproxyhal_touch_preview_cancel(const bagl_element_t *e);
+unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e);
+unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e);
+unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e);
+unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e);
+//TODO: Remove - Temp
+unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 
 #define MAX_BIP32_PATH 10
 #define MAX_USER_NAME 20
@@ -95,393 +99,30 @@ typedef struct operationContext_t {
     uint32_t addressData[32];
     uint32_t txAmountData[64];
     uint8_t hashTX[32];
+    uint8_t outputTxCount;
+    uint8_t ux_sign_tx_step[64];
 } operationContext_t;
+
+char * ui_strings[64];
+
+
+
+struct {
+    char amount[64];
+    char address[32];
+    uint8_t tx_ui_step;
+    uint8_t otx_count;
+    enum bagl_glyph_e ui_left_button;
+    enum bagl_glyph_e ui_left_right;
+} tx;
 
 char keyPath[200];
 operationContext_t operationContext;
 
-bagl_element_t const ui_address_blue[] = {
-    {{BAGL_RECTANGLE, 0x00, 0, 60, 320, 420, 0, 0, BAGL_FILL, 0xf9f9f9,
-      0xf9f9f9, 0, 0},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
 
-    // type                                 id    x    y    w    h    s  r  fill
-    // fg        bg        font icon   text, out, over, touch
-    {{BAGL_RECTANGLE, 0x00, 0, 0, 320, 60, 0, 0, BAGL_FILL, 0x1d2028, 0x1d2028,
-      0, 0},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_LABEL, 0x00, 20, 0, 320, 60, 0, 0, BAGL_FILL, 0xFFFFFF, 0x1d2028,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_MIDDLE, 0},
-     "Cardano ADA",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
 
-    {{BAGL_BUTTON | BAGL_FLAG_TOUCHABLE, 0x00, 35, 385, 120, 40, 0, 6,
-      BAGL_FILL, 0xcccccc, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER |
-          BAGL_FONT_ALIGNMENT_MIDDLE,
-      0},
-     "CANCEL",
-     0,
-     0x37ae99,
-     0xF9F9F9,
-     io_seproxyhal_touch_address_cancel,
-     NULL,
-     NULL},
-    {{BAGL_BUTTON | BAGL_FLAG_TOUCHABLE, 0x00, 165, 385, 120, 40, 0, 6,
-      BAGL_FILL, 0x41ccb4, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER |
-          BAGL_FONT_ALIGNMENT_MIDDLE,
-      0},
-     "CONFIRM",
-     0,
-     0x37ae99,
-     0xF9F9F9,
-     io_seproxyhal_touch_address_ok,
-     NULL,
-     NULL},
 
-    {{BAGL_LABEL, 0x00, 0, 147, 320, 32, 0, 0, 0, 0x000000, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Get public key for path",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_LABEL, 0x00, 0, 280, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_16px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     (const char *)keyPath,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL}};
 
-unsigned int ui_address_blue_button(unsigned int button_mask,
-                                    unsigned int button_mask_counter) {
-    return 0;
-}
-
-// UI to approve or deny the signature proposal
-static const bagl_element_t const ui_approval_ssh_blue[] = {
-    {{BAGL_RECTANGLE, 0x00, 0, 60, 320, 420, 0, 0, BAGL_FILL, 0xf9f9f9,
-      0xf9f9f9, 0, 0},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    // type                                 id    x    y    w    h    s  r  fill
-    // fg        bg        font icon   text, out, over, touch
-    {{BAGL_RECTANGLE, 0x00, 0, 0, 320, 60, 0, 0, BAGL_FILL, 0x1d2028, 0x1d2028,
-      0, 0},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_LABEL, 0x00, 20, 0, 320, 60, 0, 0, BAGL_FILL, 0xFFFFFF, 0x1d2028,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_MIDDLE, 0},
-     "Cardano ADA",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    {{BAGL_BUTTON | BAGL_FLAG_TOUCHABLE, 0x00, 35, 385, 120, 40, 0, 6,
-      BAGL_FILL, 0xcccccc, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER |
-          BAGL_FONT_ALIGNMENT_MIDDLE,
-      0},
-     "CANCEL",
-     0,
-     0x37ae99,
-     0xF9F9F9,
-     io_seproxyhal_touch_sign_cancel,
-     NULL,
-     NULL},
-    {{BAGL_BUTTON | BAGL_FLAG_TOUCHABLE, 0x00, 165, 385, 120, 40, 0, 6,
-      BAGL_FILL, 0x41ccb4, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER |
-          BAGL_FONT_ALIGNMENT_MIDDLE,
-      0},
-     "CONFIRM",
-     0,
-     0x37ae99,
-     0xF9F9F9,
-     io_seproxyhal_touch_sign_ok,
-     NULL,
-     NULL},
-
-    {{BAGL_LABEL, 0x00, 0, 87, 320, 32, 0, 0, 0, 0x000000, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Confirm SSH authentication with key",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_LABEL, 0x00, 0, 125, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_16px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     (const char *)keyPath,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-};
-
-unsigned int ui_approval_ssh_blue_button(unsigned int button_mask,
-                                         unsigned int button_mask_counter) {
-    return 0;
-}
-
-// UI to approve or deny the signature proposal
-static const bagl_element_t const ui_approval_pgp_blue[] = {
-    {{BAGL_RECTANGLE, 0x00, 0, 60, 320, 420, 0, 0, BAGL_FILL, 0xf9f9f9,
-      0xf9f9f9, 0, 0},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    // type                                 id    x    y    w    h    s  r  fill
-    // fg        bg        font icon   text, out, over, touch
-    {{BAGL_RECTANGLE, 0x00, 0, 0, 320, 60, 0, 0, BAGL_FILL, 0x1d2028, 0x1d2028,
-      0, 0},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_LABEL, 0x00, 20, 0, 320, 60, 0, 0, BAGL_FILL, 0xFFFFFF, 0x1d2028,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_MIDDLE, 0},
-     "Cardano ADA",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    {{BAGL_BUTTON | BAGL_FLAG_TOUCHABLE, 0x00, 35, 385, 120, 40, 0, 6,
-      BAGL_FILL, 0xcccccc, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER |
-          BAGL_FONT_ALIGNMENT_MIDDLE,
-      0},
-     "CANCEL",
-     0,
-     0x37ae99,
-     0xF9F9F9,
-     io_seproxyhal_touch_sign_cancel,
-     NULL,
-     NULL},
-    {{BAGL_BUTTON | BAGL_FLAG_TOUCHABLE, 0x00, 165, 385, 120, 40, 0, 6,
-      BAGL_FILL, 0x41ccb4, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER |
-          BAGL_FONT_ALIGNMENT_MIDDLE,
-      0},
-     "CONFIRM",
-     0,
-     0x37ae99,
-     0xF9F9F9,
-     io_seproxyhal_touch_sign_ok,
-     NULL,
-     NULL},
-
-    {{BAGL_LABEL, 0x00, 0, 87, 320, 32, 0, 0, 0, 0x000000, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Confirm PGP import with key",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_LABEL, 0x00, 0, 125, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_16px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     (const char *)keyPath,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-};
-
-unsigned int ui_approval_pgp_blue_button(unsigned int button_mask,
-                                         unsigned int button_mask_counter) {
-    return 0;
-}
-
-// UI to approve or deny the signature proposal
-static const bagl_element_t const ui_approval_pgp_ecdh_blue[] = {
-    {{BAGL_RECTANGLE, 0x00, 0, 60, 320, 420, 0, 0, BAGL_FILL, 0xf9f9f9,
-      0xf9f9f9, 0, 0},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    // type                                 id    x    y    w    h    s  r  fill
-    // fg        bg        font icon   text, out, over, touch
-    {{BAGL_RECTANGLE, 0x00, 0, 0, 320, 60, 0, 0, BAGL_FILL, 0x1d2028, 0x1d2028,
-      0, 0},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_LABEL, 0x00, 20, 0, 320, 60, 0, 0, BAGL_FILL, 0xFFFFFF, 0x1d2028,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_MIDDLE, 0},
-     "Cardano ADA",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    {{BAGL_BUTTON | BAGL_FLAG_TOUCHABLE, 0x00, 35, 385, 120, 40, 0, 6,
-      BAGL_FILL, 0xcccccc, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER |
-          BAGL_FONT_ALIGNMENT_MIDDLE,
-      0},
-     "CANCEL",
-     0,
-     0x37ae99,
-     0xF9F9F9,
-     io_seproxyhal_touch_ecdh_cancel,
-     NULL,
-     NULL},
-    {{BAGL_BUTTON | BAGL_FLAG_TOUCHABLE, 0x00, 165, 385, 120, 40, 0, 6,
-      BAGL_FILL, 0x41ccb4, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER |
-          BAGL_FONT_ALIGNMENT_MIDDLE,
-      0},
-     "CONFIRM",
-     0,
-     0x37ae99,
-     0xF9F9F9,
-     io_seproxyhal_touch_ecdh_ok,
-     NULL,
-     NULL},
-
-    {{BAGL_LABEL, 0x00, 0, 87, 320, 32, 0, 0, 0, 0x000000, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Confirm PGP ECDH with key",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_LABEL, 0x00, 0, 125, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_16px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     (const char *)keyPath,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-};
-
-unsigned int
-ui_approval_pgp_ecdh_blue_button(unsigned int button_mask,
-                                 unsigned int button_mask_counter) {
-    return 0;
-}
-
-// UI displayed when no signature proposal has been received
-static const bagl_element_t const ui_idle_blue[] = {
-    {{BAGL_RECTANGLE, 0x00, 0, 60, 320, 420, 0, 0, BAGL_FILL, 0xf9f9f9,
-      0xf9f9f9, 0, 0},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    {{BAGL_RECTANGLE, 0x00, 0, 0, 320, 60, 0, 0, BAGL_FILL, 0x1d2028, 0x1d2028,
-      0, 0},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    {{BAGL_LABEL, 0x00, 20, 0, 320, 60, 0, 0, BAGL_FILL, 0xFFFFFF, 0x1d2028,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_MIDDLE, 0},
-     "Cardano ADA",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    {{BAGL_BUTTON | BAGL_FLAG_TOUCHABLE, 0x00, 190, 215, 120, 40, 0, 6,
-      BAGL_FILL, 0x41ccb4, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER |
-          BAGL_FONT_ALIGNMENT_MIDDLE,
-      0},
-     "Exit",
-     0,
-     0x37ae99,
-     0xF9F9F9,
-     io_seproxyhal_touch_exit,
-     NULL,
-     NULL}
-
-};
-
-unsigned int ui_idle_blue_button(unsigned int button_mask,
-                                 unsigned int button_mask_counter) {
-    return 0;
-}
 
 const bagl_element_t ui_idle_nanos[] = {
     // type                               userid    x    y   w    h  str rad
@@ -505,10 +146,6 @@ const bagl_element_t ui_idle_nanos[] = {
      NULL,
      NULL,
      NULL},
-    //{{BAGL_LABELINE                       , 0x02,   0,  26, 128,  32, 0, 0, 0
-    //, 0xFFFFFF, 0x000000,
-    //BAGL_FONT_OPEN_SANS_REGULAR_11px|BAGL_FONT_ALIGNMENT_CENTER, 0  },
-    //"Waiting for requests...", 0, 0, 0, NULL, NULL, NULL },
 
     {{BAGL_ICON, 0x00, 3, 12, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
       BAGL_GLYPH_ICON_CROSS},
@@ -521,7 +158,304 @@ const bagl_element_t ui_idle_nanos[] = {
      NULL},
 };
 unsigned int ui_idle_nanos_button(unsigned int button_mask,
-                                  unsigned int button_mask_counter);
+                                  unsigned int button_mask_counter) {
+    switch (button_mask) {
+
+        case BUTTON_EVT_RELEASED | BUTTON_LEFT: // EXIT
+
+            // TODO: Wipe TX and all data
+            io_seproxyhal_touch_exit(NULL);
+
+            break;
+
+        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
+
+            io_seproxyhal_touch_show_preview(NULL);
+
+            break;
+    }
+    return 0;
+}
+
+
+
+const bagl_element_t bagl_ui_sign_tx_nanos[] = {
+    // {
+    //     {type, userid, x, y, width, height, stroke, radius, fill, fgcolor,
+    //      bgcolor, font_id, icon_id},
+    //     text,
+    //     touch_area_brim,
+    //     overfgcolor,
+    //     overbgcolor,
+    //     tap,
+    //     out,
+    //     over,
+    // },
+    {
+        {BAGL_RECTANGLE, 0x00, 0, 0, 128, 32, 0, 0, BAGL_FILL, 0x000000,
+         0xFFFFFF, 0, 0},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_LABELINE, 0x00, 0, 12, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
+         BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        "Sign",
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_LABELINE, 0x00, 0, 28, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
+         BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        "Transaction?",
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_ICON, 0x00, 0, 12, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+         BAGL_GLYPH_ICON_CROSS},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_ICON, 0x00, 120, 12, 8, 6, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+         BAGL_GLYPH_ICON_CHECK},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+};
+
+unsigned int
+bagl_ui_sign_tx_nanos_button(unsigned int button_mask,
+                            unsigned int button_mask_counter) {
+    switch (button_mask) {
+
+        case BUTTON_EVT_RELEASED | BUTTON_LEFT: // EXIT
+
+            io_seproxyhal_touch_sign_ok(NULL);
+
+            break;
+
+        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
+
+            io_seproxyhal_touch_sign_cancel(NULL);
+
+            break;
+    }
+    return 0;
+}
+
+
+
+
+
+const bagl_element_t bagl_ui_preview_tx_nanos[] = {
+    // {
+    //     {type, userid, x, y, width, height, stroke, radius, fill, fgcolor,
+    //      bgcolor, font_id, icon_id},
+    //     text,
+    //     touch_area_brim,
+    //     overfgcolor,
+    //     overbgcolor,
+    //     tap,
+    //     out,
+    //     over,
+    // },
+    {
+        {BAGL_RECTANGLE, 0x00, 0, 0, 128, 32, 0, 0, BAGL_FILL, 0x000000,
+         0xFFFFFF, 0, 0},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_LABELINE, 0x00, 0, 12, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
+         BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        tx.address,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_LABELINE, 0x00, 0, 28, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
+         BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        tx.address,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_ICON, 0x00, 0, 12, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+         BAGL_GLYPH_ICON_LEFT},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_ICON, 0x00, 120, 12, 8, 6, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+         BAGL_GLYPH_ICON_RIGHT},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+};
+
+unsigned int
+bagl_ui_preview_tx_nanos_button(unsigned int button_mask,
+                            unsigned int button_mask_counter) {
+    switch (button_mask) {
+    case BUTTON_EVT_RELEASED | BUTTON_LEFT:
+
+        io_seproxyhal_touch_preview_prev(NULL);
+
+        break;
+
+    case BUTTON_EVT_RELEASED | BUTTON_RIGHT:
+
+        io_seproxyhal_touch_preview_next(NULL);
+
+        break;
+    }
+    return 0;
+}
+
+
+const bagl_element_t bagl_ui_approval_preview_tx_nanos[] = {
+    // {
+    //     {type, userid, x, y, width, height, stroke, radius, fill, fgcolor,
+    //      bgcolor, font_id, icon_id},
+    //     text,
+    //     touch_area_brim,
+    //     overfgcolor,
+    //     overbgcolor,
+    //     tap,
+    //     out,
+    //     over,
+    // },
+    {
+        {BAGL_RECTANGLE, 0x00, 0, 0, 128, 32, 0, 0, BAGL_FILL, 0x000000,
+         0xFFFFFF, 0, 0},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_LABELINE, 0x00, 0, 12, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
+         BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        "Preview",
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_LABELINE, 0x00, 0, 28, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
+         BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        "Transaction?",
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_ICON, 0x00, 0, 12, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+         BAGL_GLYPH_ICON_CROSS},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_ICON, 0x00, 120, 12, 8, 6, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+         BAGL_GLYPH_ICON_CHECK},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+};
+
+unsigned int
+bagl_ui_approval_preview_tx_nanos_button(unsigned int button_mask,
+                            unsigned int button_mask_counter) {
+    switch (button_mask) {
+
+        case BUTTON_EVT_RELEASED | BUTTON_LEFT: // EXIT
+
+            io_seproxyhal_touch_preview_cancel(NULL);
+
+            break;
+
+        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE PREVIEW
+
+            io_seproxyhal_touch_preview_ok(NULL);
+
+            break;
+    }
+    return 0;
+}
+
+
+
+
+
+
+
 
 const bagl_element_t ui_address_nanos[] = {
     // type                               userid    x    y   w    h  str rad
@@ -577,210 +511,16 @@ const bagl_element_t ui_address_nanos[] = {
 unsigned int ui_address_nanos_button(unsigned int button_mask,
                                      unsigned int button_mask_counter);
 
-const bagl_element_t ui_approval_ssh_nanos[] = {
-    // type                               userid    x    y   w    h  str rad
-    // fill      fg        bg      fid iid  txt   touchparams...       ]
-    {{BAGL_RECTANGLE, 0x00, 0, 0, 128, 32, 0, 0, BAGL_FILL, 0x000000, 0xFFFFFF,
-      0, 0},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
 
-    {{BAGL_LABELINE, 0x01, 0, 12, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
-      BAGL_FONT_OPEN_SANS_EXTRABOLD_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Cardano ADA",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_LABELINE, 0x01, 0, 26, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
-      BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Authenticate?",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    {{BAGL_LABELINE, 0x02, 0, 12, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
-      BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "User",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_LABELINE, 0x02, 0, 26, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
-      BAGL_FONT_OPEN_SANS_EXTRABOLD_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     (char *)operationContext.userName,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    {{BAGL_ICON, 0x00, 3, 12, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
-      BAGL_GLYPH_ICON_CROSS},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_ICON, 0x00, 117, 13, 8, 6, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
-      BAGL_GLYPH_ICON_CHECK},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-};
-unsigned int ui_approval_ssh_nanos_button(unsigned int button_mask,
-                                          unsigned int button_mask_counter);
-
-const bagl_element_t ui_approval_pgp_nanos[] = {
-    // type                               userid    x    y   w    h  str rad
-    // fill      fg        bg      fid iid  txt   touchparams...       ]
-    {{BAGL_RECTANGLE, 0x00, 0, 0, 128, 32, 0, 0, BAGL_FILL, 0x000000, 0xFFFFFF,
-      0, 0},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    {{BAGL_LABELINE, 0x01, 0, 12, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
-      BAGL_FONT_OPEN_SANS_EXTRABOLD_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Cardano ADA",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_LABELINE, 0x01, 0, 26, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
-      BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Sign?",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    {{BAGL_ICON, 0x00, 3, 12, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
-      BAGL_GLYPH_ICON_CROSS},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_ICON, 0x00, 117, 13, 8, 6, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
-      BAGL_GLYPH_ICON_CHECK},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-};
-unsigned int ui_approval_pgp_nanos_button(unsigned int button_mask,
-                                          unsigned int button_mask_counter);
-
-const bagl_element_t ui_approval_pgp_ecdh_nanos[] = {
-    // type                               userid    x    y   w    h  str rad
-    // fill      fg        bg      fid iid  txt   touchparams...       ]
-    {{BAGL_RECTANGLE, 0x00, 0, 0, 128, 32, 0, 0, BAGL_FILL, 0x000000, 0xFFFFFF,
-      0, 0},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    {{BAGL_LABELINE, 0x01, 0, 12, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
-      BAGL_FONT_OPEN_SANS_EXTRABOLD_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Cardano ADA",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_LABELINE, 0x01, 0, 26, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
-      BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "ECDH?",
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-
-    {{BAGL_ICON, 0x00, 3, 12, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
-      BAGL_GLYPH_ICON_CROSS},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-    {{BAGL_ICON, 0x00, 117, 13, 8, 6, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
-      BAGL_GLYPH_ICON_CHECK},
-     NULL,
-     0,
-     0,
-     0,
-     NULL,
-     NULL,
-     NULL},
-};
-unsigned int
-ui_approval_pgp_ecdh_nanos_button(unsigned int button_mask,
-                                  unsigned int button_mask_counter);
 
 void ui_idle(void) {
     if (os_seph_features() &
         SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
-        UX_DISPLAY(ui_idle_blue, NULL);
+        // Ledger Blue not supported
+        THROW(0x600C);
     } else {
         UX_DISPLAY(ui_idle_nanos, NULL);
     }
-}
-
-unsigned int ui_approval_ssh_prepro(const bagl_element_t *element) {
-    if (element->component.userid > 0) {
-        switch (element->component.userid) {
-        case 1:
-            io_seproxyhal_setup_ticker(2000);
-            break;
-        case 2:
-            io_seproxyhal_setup_ticker(3000);
-            break;
-        }
-        return (ux_step == element->component.userid - 1);
-    }
-    return 1;
 }
 
 uint32_t path_item_to_string(char *dest, uint32_t number) {
@@ -861,19 +601,19 @@ void parse_cbor_transaction() {
               // Skip Array Length
               offset += (array_length + 1);
           } else {
-              // TODO: Must throw here
+
               error = true;
 
               if(itx_count != 1) {
                   THROW(0x6E00 | operationContext.message[offset]);
               }
+
               THROW(0x6DDA);
           }
       }
       offset++;
   } else {
       // Invalid TX, must have at least one input
-      // TODO: Must throw here
       error = true;
       THROW(0x6DDB);
   }
@@ -921,20 +661,23 @@ void parse_cbor_transaction() {
                   (txAmount[5] << 8) | (txAmount[4]);
               offset += 8;
           } else {
-              // TODO: Must throw here
               error = true;
               THROW(0x6DDC);
           }
+          operationContext.outputTxCount = otx_count;
       }
   } else {
       // Invalid TX, must have at least one output
-      // TODO: Must throw here
       error = true;
       THROW(0x6DDD);
   }
 
   operationContext.finalUTXOCount = otx_count;
   cbor_destroy(&stream);
+
+}
+
+uint32_t populate_sign_tx_ux_flow() {
 
 }
 
@@ -979,6 +722,7 @@ unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e) {
     return 0; // do not redraw the widget
 }
 
+/* TODO: Remove
 unsigned int ui_idle_nanos_button(unsigned int button_mask,
                                   unsigned int button_mask_counter) {
     switch (button_mask) {
@@ -988,163 +732,88 @@ unsigned int ui_idle_nanos_button(unsigned int button_mask,
     }
     return 0;
 }
+*/
+
+unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e) {
+    UX_DISPLAY(bagl_ui_approval_preview_tx_nanos, NULL);
+    return 0;
+}
+
+unsigned int io_seproxyhal_touch_preview_ok(const bagl_element_t *e) {
+    tx.tx_ui_step = 0;
+    tx.otx_count = 5;
+    ui_strings[0] = "Preview Transaction 1";
+    ui_strings[1] = "Signing Request 2";
+    ui_strings[2] = "332084.26245162772";
+    ui_strings[3] = "BDHJBa...9wDuiA";
+    ui_strings[4] = "TX Fee Ada";
+
+    UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
+
+    return 0;
+}
+
+unsigned int io_seproxyhal_touch_preview_cancel(const bagl_element_t *e) {
+    tx.tx_ui_step = -1;
+    // TODO: Wipe TX and all data
+    ui_idle();
+
+    return 0;
+}
+
+unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e) {
+    if(tx.tx_ui_step > 0) {  // CONTINUE
+
+        tx.tx_ui_step--;
+
+    } else { // EXIT
+
+        UX_DISPLAY(bagl_ui_approval_preview_tx_nanos, NULL);
+        return 0;
+    }
+
+    os_memset(tx.address, 0, 32);
+    os_memmove(tx.address, ui_strings[tx.tx_ui_step], 32);
+
+    UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
+
+    return 0;
+}
+
+unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e) {
+    //counter++;
+    //displayStringIndex = counter % 5;
+
+
+    if(tx.tx_ui_step >= tx.otx_count -1) {
+        UX_DISPLAY(bagl_ui_sign_tx_nanos, NULL);
+        return 0;
+    } else {
+        tx.tx_ui_step++;
+    }
+
+    //os_memset(test.data, 0, 20);
+    //snprintf(test.data, 20, "Hello, World %d", displayStringIndex);
+    //os_memmove(test.data, "Hello, World 1 ", 15);
+
+    //snprintf(test.data, 20, "Hello, World %d", displayStringIndex);
+    os_memset(tx.address, 0, 32);
+    //test.data = ui_strings[displayStringIndex];
+    os_memmove(tx.address, ui_strings[tx.tx_ui_step], 32);
+
+    UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
+
+    return 0;
+}
+
 
 unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
-    uint8_t privateKeyData[32];
-    uint8_t hash[32];
-    cx_ecfp_private_key_t privateKey;
-    uint32_t tx = 0;
-    if (!operationContext.direct) {
-        if (!operationContext.fullMessageHash) {
-            cx_hash(&operationContext.hash.header, CX_LAST, hash, 0, hash);
-        }
-    } else {
-        os_memmove(hash, operationContext.hashData, 32);
-    }
-#if CX_APILEVEL >= 5
-    os_perso_derive_node_bip32(
-        operationContext.curve, operationContext.bip32Path,
-        operationContext.pathLength, privateKeyData, NULL);
-#else
-    os_perso_derive_seed_bip32(operationContext.bip32Path,
-                               operationContext.pathLength, privateKeyData,
-                               NULL);
-#endif
-    cx_ecfp_init_private_key(operationContext.curve, privateKeyData, 32,
-                             &privateKey);
-    os_memset(privateKeyData, 0, sizeof(privateKeyData));
-    if (operationContext.curve == CX_CURVE_Ed25519) {
-        if (!operationContext.fullMessageHash) {
-            tx = cx_eddsa_sign(&privateKey, NULL, CX_LAST, CX_SHA512, hash,
-                               sizeof(hash), G_io_apdu_buffer);
-        } else {
-            tx = cx_eddsa_sign(
-                &privateKey, NULL, CX_LAST, CX_SHA512, operationContext.message,
-                operationContext.messageLength, G_io_apdu_buffer);
-        }
-    } else {
-        tx = cx_ecdsa_sign(&privateKey, CX_RND_RFC6979 | CX_LAST, CX_SHA256,
-                           hash, sizeof(hash), G_io_apdu_buffer);
-    }
-    if (operationContext.getPublicKey) {
-#if ((CX_APILEVEL >= 5) && (CX_APILEVEL < 7))
-        if (operationContext.curve == CX_CURVE_Ed25519) {
-            cx_ecfp_init_public_key(operationContext.curve, NULL, 0,
-                                    &operationContext.publicKey);
-            cx_eddsa_get_public_key(&privateKey, &operationContext.publicKey);
-        } else {
-            cx_ecfp_generate_pair(operationContext.curve,
-                                  &operationContext.publicKey, &privateKey, 1);
-        }
-#else
-        cx_ecfp_generate_pair(operationContext.curve,
-                              &operationContext.publicKey, &privateKey, 1);
-#endif
-        os_memmove(G_io_apdu_buffer + tx, operationContext.publicKey.W, 65);
-        tx += 65;
-    }
-    os_memset(&privateKey, 0, sizeof(privateKey));
-    os_memset(&privateKeyData, 0, sizeof(privateKeyData));
-    G_io_apdu_buffer[tx++] = 0x90;
-    G_io_apdu_buffer[tx++] = 0x00;
-    // Send back the response, do not restart the event loop
-    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-    // Display back the original UX
     ui_idle();
-    return 0; // do not redraw the widget
+    return 0;
 }
 
 unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e) {
-    G_io_apdu_buffer[0] = 0x69;
-    G_io_apdu_buffer[1] = 0x85;
-    // Send back the response, do not restart the event loop
-    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 2);
-    // Display back the original UX
     ui_idle();
-    return 0; // do not redraw the widget
-}
-
-unsigned int io_seproxyhal_touch_ecdh_ok(const bagl_element_t *e) {
-    uint8_t privateKeyData[32];
-    cx_ecfp_private_key_t privateKey;
-    uint32_t tx = 0;
-#if CX_APILEVEL >= 5
-    os_perso_derive_node_bip32(
-        operationContext.curve, operationContext.bip32Path,
-        operationContext.pathLength, privateKeyData, NULL);
-#else
-    os_perso_derive_seed_bip32(operationContext.bip32Path,
-                               operationContext.pathLength, privateKeyData,
-                               NULL);
-#endif
-    cx_ecfp_init_private_key(operationContext.curve, privateKeyData, 32,
-                             &privateKey);
-    tx = cx_ecdh(&privateKey, CX_ECDH_POINT, operationContext.publicKey.W,
-                 G_io_apdu_buffer);
-    os_memset(&privateKey, 0, sizeof(privateKey));
-    os_memset(&privateKeyData, 0, sizeof(privateKeyData));
-    G_io_apdu_buffer[tx++] = 0x90;
-    G_io_apdu_buffer[tx++] = 0x00;
-    // Send back the response, do not restart the event loop
-    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-    // Display back the original UX
-    ui_idle();
-    return 0; // do not redraw the widget
-}
-
-unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e) {
-    G_io_apdu_buffer[0] = 0x69;
-    G_io_apdu_buffer[1] = 0x85;
-    // Send back the response, do not restart the event loop
-    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 2);
-    // Display back the original UX
-    ui_idle();
-    return 0; // do not redraw the widget
-}
-
-unsigned int ui_approval_ssh_nanos_button(unsigned int button_mask,
-                                          unsigned int button_mask_counter) {
-    switch (button_mask) {
-    case BUTTON_EVT_RELEASED | BUTTON_LEFT: // CANCEL
-        io_seproxyhal_touch_sign_cancel(NULL);
-        break;
-
-    case BUTTON_EVT_RELEASED | BUTTON_RIGHT: { // OK
-        io_seproxyhal_touch_sign_ok(NULL);
-        break;
-    }
-    }
-    return 0;
-}
-
-unsigned int ui_approval_pgp_nanos_button(unsigned int button_mask,
-                                          unsigned int button_mask_counter) {
-    switch (button_mask) {
-    case BUTTON_EVT_RELEASED | BUTTON_LEFT: // CANCEL
-        io_seproxyhal_touch_sign_cancel(NULL);
-        break;
-
-    case BUTTON_EVT_RELEASED | BUTTON_RIGHT: { // OK
-        io_seproxyhal_touch_sign_ok(NULL);
-        break;
-    }
-    }
-    return 0;
-}
-
-unsigned int
-ui_approval_pgp_ecdh_nanos_button(unsigned int button_mask,
-                                  unsigned int button_mask_counter) {
-    switch (button_mask) {
-    case BUTTON_EVT_RELEASED | BUTTON_LEFT: // CANCEL
-        io_seproxyhal_touch_ecdh_cancel(NULL);
-        break;
-
-    case BUTTON_EVT_RELEASED | BUTTON_RIGHT: { // OK
-        io_seproxyhal_touch_ecdh_ok(NULL);
-        break;
-    }
-    }
     return 0;
 }
 
@@ -1358,7 +1027,8 @@ void sample_main(void) {
                     path_to_string(keyPath);
                     if (os_seph_features() &
                         SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
-                        UX_DISPLAY(ui_address_blue, NULL);
+                        //Blue Not supported
+                        THROW(0x600C);
                     } else {
                         UX_DISPLAY(ui_address_nanos, NULL);
                     }
@@ -1423,7 +1093,8 @@ void sample_main(void) {
                     path_to_string(keyPath);
                     if (os_seph_features() &
                         SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
-                        UX_DISPLAY(ui_address_blue, NULL);
+                        // Ledger Blue not supported
+                        THROW(0x600C);
                     } else {
                         UX_DISPLAY(ui_address_nanos, NULL);
                     }
