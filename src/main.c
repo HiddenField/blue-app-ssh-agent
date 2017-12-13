@@ -21,10 +21,9 @@
 #include "blake2.h"
 #include "blake2-impl.h"
 
-#include <stdbool.h>
-
 #include "os_io_seproxyhal.h"
-#include "string.h"
+#include <string.h>
+#include <stdbool.h>
 
 unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_address_ok(const bagl_element_t *e);
@@ -35,6 +34,9 @@ unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e);
+
+unsigned int prepare_tx_preview_ui();
+
 //TODO: Remove - Temp
 unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 
@@ -102,17 +104,17 @@ typedef struct operationContext_t {
     uint8_t outputTxCount;
 } operationContext_t;
 
+char ui_send_ada_to_label[] = "Send ADA";
+char ui_send_to_address_label[] = "To Address";
+char ui_tx_fee_label[] = "TX Fee ADA";
+
 char * ui_strings[4];
 
-
-
 struct {
-    char amount[32];
-    char address[32];
+    char ui_label[32];
+    char ui_value[32];
     uint8_t tx_ui_step;
     uint8_t otx_count;
-    enum bagl_glyph_e ui_left_button;
-    enum bagl_glyph_e ui_left_right;
 } tx;
 
 char keyPath[200];
@@ -297,7 +299,7 @@ const bagl_element_t bagl_ui_preview_tx_nanos[] = {
     {
         {BAGL_LABELINE, 0x00, 0, 12, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
          BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-        tx.address,
+        tx.ui_label,
         0,
         0,
         0,
@@ -308,7 +310,7 @@ const bagl_element_t bagl_ui_preview_tx_nanos[] = {
     {
         {BAGL_LABELINE, 0x00, 0, 28, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
          BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-        tx.amount,
+        tx.ui_value,
         0,
         0,
         0,
@@ -845,24 +847,12 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e) {
 unsigned int io_seproxyhal_touch_preview_ok(const bagl_element_t *e) {
     tx.tx_ui_step = 0;
     tx.otx_count = operationContext.finalUTXOCount;
-    ui_strings[0] = "Send";
-    ui_strings[1] = "Signing Request 2";
-    ui_strings[2] = "332084.26245162772";
-    ui_strings[3] = "BDHJBa...9wDuiA";
-    ui_strings[4] = "TX Fee Ada";
 
-    uint8_t txAmountIndex = (tx.tx_ui_step - 1) * 2;
-    //operationContext.txAmountData[txAmountIndex]
-
-    os_memset(tx.address, 0, 32);
-    os_memset(tx.amount, 0, 32);
-
-    os_memmove(tx.address, ui_strings[tx.tx_ui_step], 32);
-    ada_print_amount(operationContext.txAmountData[tx.tx_ui_step], tx.amount, 32);
+    prepare_tx_preview_ui();
 
     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
 
-    //snprintf(vars.tmp.fullAmount, 65, "%.*H", 32, vars.tmp.fullAmount);
+    //snprintf(tx.ui_label, 65, "%.*H", 32, tx.ui_label);
 
     return 0;
 }
@@ -886,10 +876,7 @@ unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e) {
         return 0;
     }
 
-    os_memset(tx.address, 0, 32);
-    os_memset(tx.amount, 0, 32);
-    os_memmove(tx.address, ui_strings[tx.tx_ui_step], 32);
-    ada_print_amount(operationContext.txAmountData[tx.tx_ui_step], tx.amount, 32);
+    prepare_tx_preview_ui();
 
     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
 
@@ -898,21 +885,42 @@ unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e) {
 
 unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e) {
 
-    if(tx.tx_ui_step >= tx.otx_count -1) {  // CONTINUE TO SIGN
+    if(tx.tx_ui_step == (tx.otx_count * 2)) {  // CONTINUE TO SIGN
         UX_DISPLAY(bagl_ui_sign_tx_nanos, NULL);
         return 0;
     } else {  // SHOW NEXT
         tx.tx_ui_step++;
     }
 
-    os_memset(tx.address, 0, 32);
-    os_memset(tx.amount, 0, 32);
-    os_memmove(tx.address, ui_strings[tx.tx_ui_step], 32);
-    ada_print_amount(operationContext.txAmountData[tx.tx_ui_step], tx.amount, 32);
+    prepare_tx_preview_ui();
 
     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
 
     return 0;
+}
+
+unsigned int prepare_tx_preview_ui() {
+
+    ui_strings[0] = "Send ADA";
+    ui_strings[1] = "To Address";
+    ui_strings[2] = "TX Fee ADA";
+
+    os_memset(tx.ui_label, 0, 32);
+    os_memset(tx.ui_value, 0, 32);
+
+    int tx_amount_index = tx.tx_ui_step/2;
+    int tx_address_index = (tx.tx_ui_step -1)/2;
+
+    if(tx.tx_ui_step == (tx.otx_count * 2)) {
+        os_memmove(tx.ui_label, ui_strings[2], 32);
+        ada_print_amount("0.00", tx.ui_value, 32);
+    } else if(tx.tx_ui_step % 2 == 0) { // EVEN TX AMOUNT
+        os_memmove(tx.ui_label, ui_strings[0], 32);
+        ada_print_amount(operationContext.txAmountData[tx_amount_index], tx.ui_value, 32);
+    } else {  // ODD TX ADDRESS
+        os_memmove(tx.ui_label, ui_strings[1], 32);
+        ada_print_amount(operationContext.addressData[tx_address_index], tx.ui_value, 32);
+    }
 }
 
 
@@ -1248,12 +1256,6 @@ void sample_main(void) {
 
                 case INS_HASH: {
 
-                    uint8_t addr_checksum_tmp[4];
-                    uint32_t addr_checksum;
-                    uint8_t tx_amount_tmp[8];
-                    uint32_t tx_amount_1;
-                    uint32_t tx_amount_2;
-
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
                     uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
@@ -1346,10 +1348,6 @@ void sample_main(void) {
 
 
                 case INS_SIGN_TX: {
-
-                    uint8_t addr_checksum_tmp[4];
-                    uint32_t addr_checksum;
-                    uint8_t tx_amount_tmp[8];
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
