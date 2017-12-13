@@ -438,7 +438,7 @@ bagl_ui_approval_preview_tx_nanos_button(unsigned int button_mask,
 
         case BUTTON_EVT_RELEASED | BUTTON_LEFT: // EXIT
 
-            io_seproxyhal_touch_preview_cancel(NULL);
+            io_seproxyhal_touch_sign_cancel(NULL);
 
             break;
 
@@ -685,10 +685,6 @@ void parse_cbor_transaction() {
 
   operationContext.finalUTXOCount = otx_count;
   cbor_destroy(&stream);
-
-}
-
-uint32_t populate_sign_tx_ux_flow() {
 
 }
 
@@ -962,7 +958,17 @@ unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e) {
 
     //TODO: Cleanup transaction data
 
+    uint32_t tx = 0;
+    G_io_apdu_buffer[tx++] = &operationContext.finalUTXOCount;
+    G_io_apdu_buffer[tx++] = 0x00;
+
+    G_io_apdu_buffer[tx++] = 0x90;
+    G_io_apdu_buffer[tx++] = 0x00;
+    // Send back the response, do not restart the event loop
+    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+    // Display back the original UX
     ui_idle();
+
     return 0;
 }
 
