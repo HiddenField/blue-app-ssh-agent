@@ -97,12 +97,12 @@ typedef struct operationContext_t {
     uint32_t transactionOffset;
     uint8_t finalUTXOCount;
     uint32_t addressData[32];
-    uint32_t txAmountData[64];
+    uint64_t txAmountData[64];
     uint8_t hashTX[32];
     uint8_t outputTxCount;
 } operationContext_t;
 
-char * ui_strings[64];
+char * ui_strings[4];
 
 
 
@@ -651,6 +651,15 @@ void parse_cbor_transaction() {
               // Skip CBOR int type
               offset++;
               uint8_t *txAmount = operationContext.message + offset;
+
+              // Trying to work with uint64_t again
+              operationContext.txAmountData[otx_count-1] =
+                       ((uint64_t)txAmount[7]) | ((uint64_t)txAmount[6] << 8) |
+                       ((uint64_t)txAmount[5] << 16) | ((uint64_t)txAmount[4] << 24) |
+                       ((uint64_t)txAmount[3] << 32) | ((uint64_t)txAmount[2] << 40) |
+                       ((uint64_t)txAmount[1] << 48) | ((uint64_t)txAmount[0] << 56);
+
+              /*
               uint8_t txAmountIndex = (otx_count - 1) * 2;
               operationContext.txAmountData[txAmountIndex] =
                   (txAmount[3] << 24) | (txAmount[2] << 16) |
@@ -658,6 +667,7 @@ void parse_cbor_transaction() {
               operationContext.txAmountData[txAmountIndex + 1] =
                   (txAmount[7] << 24) | (txAmount[6] << 16) |
                   (txAmount[5] << 8) | (txAmount[4]);
+              */
               offset += 8;
           } else {
               error = true;
@@ -842,7 +852,7 @@ unsigned int io_seproxyhal_touch_preview_ok(const bagl_element_t *e) {
     ui_strings[4] = "TX Fee Ada";
 
     uint8_t txAmountIndex = (tx.tx_ui_step - 1) * 2;
-    operationContext.txAmountData[txAmountIndex]
+    //operationContext.txAmountData[txAmountIndex]
 
     os_memset(tx.address, 0, 32);
     os_memmove(tx.address, ui_strings[tx.tx_ui_step], 32);
@@ -1372,10 +1382,16 @@ void sample_main(void) {
                             &operationContext.addressData[i], 4);
                           tx += 4;
                           G_io_apdu_buffer[tx++] = 0xFF;
-                          os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i*2], 8);
+
+                          //Using uint32_t example needs to double index for each address
+                          //os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i*2], 8);
+
+                          os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i], 8);
                           tx += 8;
+
                           //os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i+1], 4);
                           //tx += 4;
+
                           G_io_apdu_buffer[tx++] = 0xFF;
                         }
                         //os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionLength, 4);
