@@ -100,7 +100,6 @@ typedef struct operationContext_t {
     uint32_t txAmountData[64];
     uint8_t hashTX[32];
     uint8_t outputTxCount;
-    uint8_t ux_sign_tx_step[64];
 } operationContext_t;
 
 char * ui_strings[64];
@@ -309,7 +308,7 @@ const bagl_element_t bagl_ui_preview_tx_nanos[] = {
     {
         {BAGL_LABELINE, 0x00, 0, 28, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
          BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-        tx.address,
+        tx.amount,
         0,
         0,
         0,
@@ -696,6 +695,100 @@ uint32_t generate_random_hardened_index() {
     return random_hardened_index;
 }
 
+bool adjustDecimals(char *src, uint32_t srcLength, char *target,
+                    uint32_t targetLength, uint8_t decimals) {
+    uint32_t startOffset;
+    uint32_t lastZeroOffset = 0;
+    uint32_t offset = 0;
+
+    if ((srcLength == 1) && (*src == '0')) {
+        if (targetLength < 2) {
+            return false;
+        }
+        target[offset++] = '0';
+        target[offset++] = '\0';
+        return true;
+    }
+    if (srcLength <= decimals) {
+        uint32_t delta = decimals - srcLength;
+        if (targetLength < srcLength + 1 + 2 + delta) {
+            return false;
+        }
+        target[offset++] = '0';
+        target[offset++] = '.';
+        for (uint32_t i = 0; i < delta; i++) {
+            target[offset++] = '0';
+        }
+        startOffset = offset;
+        for (uint32_t i = 0; i < srcLength; i++) {
+            target[offset++] = src[i];
+        }
+        target[offset] = '\0';
+    } else {
+        uint32_t sourceOffset = 0;
+        uint32_t delta = srcLength - decimals;
+        if (targetLength < srcLength + 1 + 1) {
+            return false;
+        }
+        while (offset < delta) {
+            target[offset++] = src[sourceOffset++];
+        }
+        if (decimals != 0) {
+            target[offset++] = '.';
+        }
+        startOffset = offset;
+        while (sourceOffset < srcLength) {
+            target[offset++] = src[sourceOffset++];
+        }
+        target[offset] = '\0';
+    }
+    for (uint32_t i = startOffset; i < offset; i++) {
+        if (target[i] == '0') {
+            if (lastZeroOffset == 0) {
+                lastZeroOffset = i;
+            }
+        } else {
+            lastZeroOffset = 0;
+        }
+    }
+    if (lastZeroOffset != 0) {
+        target[lastZeroOffset] = '\0';
+        if (target[lastZeroOffset - 1] == '.') {
+            target[lastZeroOffset - 1] = '\0';
+        }
+    }
+    return true;
+}
+
+unsigned short ada_print_amount(uint64_t amount, uint8_t *out,
+                                uint32_t outlen) {
+    char tmp[20];
+    char tmp2[25];
+    uint32_t numDigits = 0, i;
+    uint64_t base = 1;
+    while (base <= amount) {
+        base *= 10;
+        numDigits++;
+    }
+    if (numDigits > sizeof(tmp) - 1) {
+        THROW(EXCEPTION);
+    }
+    base /= 10;
+    for (i = 0; i < numDigits; i++) {
+        tmp[i] = '0' + ((amount / base) % 10);
+        base /= 10;
+    }
+    tmp[i] = '\0';
+    strcpy(tmp2, "ADA ");
+    adjustDecimals(tmp, i, tmp2 + 4, 25, 6);
+    if (strlen(tmp2) < outlen - 1) {
+        strcpy(out, tmp2);
+    } else {
+        out[0] = '\0';
+    }
+    return strlen(out);
+}
+
 void derive_bip32_node_private_key(uint8_t *privateKeyData) {
 
   // START Node Derivation
@@ -741,14 +834,22 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e) {
 
 unsigned int io_seproxyhal_touch_preview_ok(const bagl_element_t *e) {
     tx.tx_ui_step = 0;
-    tx.otx_count = 5;
-    ui_strings[0] = "Preview Transaction 1";
+    tx.otx_count = operationContext.finalUTXOCount;
+    ui_strings[0] = "Send";
     ui_strings[1] = "Signing Request 2";
     ui_strings[2] = "332084.26245162772";
     ui_strings[3] = "BDHJBa...9wDuiA";
     ui_strings[4] = "TX Fee Ada";
 
+    uint8_t txAmountIndex = (tx.tx_ui_step - 1) * 2;
+    operationContext.txAmountData[txAmountIndex]
+
+    os_memset(tx.address, 0, 32);
+    os_memmove(tx.address, ui_strings[tx.tx_ui_step], 32);
+
     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
+
+    //snprintf(vars.tmp.fullAmount, 65, "%.*H", 32, vars.tmp.fullAmount);
 
     return 0;
 }
