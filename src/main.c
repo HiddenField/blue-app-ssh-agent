@@ -97,7 +97,7 @@ typedef struct operationContext_t {
     uint32_t transactionOffset;
     uint8_t finalUTXOCount;
     uint32_t addressData[32];
-    uint64_t txAmountData[64];
+    uint64_t txAmountData[32];
     uint8_t hashTX[32];
     uint8_t outputTxCount;
 } operationContext_t;
@@ -107,7 +107,7 @@ char * ui_strings[4];
 
 
 struct {
-    char amount[64];
+    char amount[32];
     char address[32];
     uint8_t tx_ui_step;
     uint8_t otx_count;
@@ -254,13 +254,13 @@ bagl_ui_sign_tx_nanos_button(unsigned int button_mask,
 
         case BUTTON_EVT_RELEASED | BUTTON_LEFT: // EXIT
 
-            io_seproxyhal_touch_sign_ok(NULL);
+            io_seproxyhal_touch_sign_cancel(NULL);
 
             break;
 
         case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
 
-            io_seproxyhal_touch_sign_cancel(NULL);
+            io_seproxyhal_touch_sign_ok(NULL);
 
             break;
     }
@@ -855,7 +855,10 @@ unsigned int io_seproxyhal_touch_preview_ok(const bagl_element_t *e) {
     //operationContext.txAmountData[txAmountIndex]
 
     os_memset(tx.address, 0, 32);
+    os_memset(tx.amount, 0, 32);
+
     os_memmove(tx.address, ui_strings[tx.tx_ui_step], 32);
+    ada_print_amount(operationContext.txAmountData[tx.tx_ui_step], tx.amount, 32);
 
     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
 
@@ -873,7 +876,7 @@ unsigned int io_seproxyhal_touch_preview_cancel(const bagl_element_t *e) {
 }
 
 unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e) {
-    if(tx.tx_ui_step > 0) {  // CONTINUE
+    if(tx.tx_ui_step > 0) {  // GO BACK
 
         tx.tx_ui_step--;
 
@@ -884,7 +887,9 @@ unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e) {
     }
 
     os_memset(tx.address, 0, 32);
+    os_memset(tx.amount, 0, 32);
     os_memmove(tx.address, ui_strings[tx.tx_ui_step], 32);
+    ada_print_amount(operationContext.txAmountData[tx.tx_ui_step], tx.amount, 32);
 
     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
 
@@ -892,25 +897,18 @@ unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e) {
 }
 
 unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e) {
-    //counter++;
-    //displayStringIndex = counter % 5;
 
-
-    if(tx.tx_ui_step >= tx.otx_count -1) {
+    if(tx.tx_ui_step >= tx.otx_count -1) {  // CONTINUE TO SIGN
         UX_DISPLAY(bagl_ui_sign_tx_nanos, NULL);
         return 0;
-    } else {
+    } else {  // SHOW NEXT
         tx.tx_ui_step++;
     }
 
-    //os_memset(test.data, 0, 20);
-    //snprintf(test.data, 20, "Hello, World %d", displayStringIndex);
-    //os_memmove(test.data, "Hello, World 1 ", 15);
-
-    //snprintf(test.data, 20, "Hello, World %d", displayStringIndex);
     os_memset(tx.address, 0, 32);
-    //test.data = ui_strings[displayStringIndex];
+    os_memset(tx.amount, 0, 32);
     os_memmove(tx.address, ui_strings[tx.tx_ui_step], 32);
+    ada_print_amount(operationContext.txAmountData[tx.tx_ui_step], tx.amount, 32);
 
     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
 
@@ -919,11 +917,43 @@ unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e) {
 
 
 unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
+
+    uint32_t tx = 0;
+    G_io_apdu_buffer[tx++] = &operationContext.finalUTXOCount;
+    G_io_apdu_buffer[tx++] = 0xFF;
+
+    for (int i=0; i < operationContext.finalUTXOCount; i++ ) {
+        os_memmove(G_io_apdu_buffer + tx,
+          &operationContext.addressData[i], 4);
+        tx += 4;
+        G_io_apdu_buffer[tx++] = 0xFF;
+
+        //Using uint32_t example needs to double index for each address
+        //os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i*2], 8);
+
+        os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i], 8);
+        tx += 8;
+
+        //os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i+1], 4);
+        //tx += 4;
+
+        G_io_apdu_buffer[tx++] = 0xFF;
+    }
+
+    G_io_apdu_buffer[tx++] = 0x90;
+    G_io_apdu_buffer[tx++] = 0x00;
+    // Send back the response, do not restart the event loop
+    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+    // Display back the original UX
     ui_idle();
+
     return 0;
 }
 
 unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e) {
+
+    //TODO: Cleanup transaction data
+
     ui_idle();
     return 0;
 }
@@ -1320,8 +1350,6 @@ void sample_main(void) {
                     uint8_t addr_checksum_tmp[4];
                     uint32_t addr_checksum;
                     uint8_t tx_amount_tmp[8];
-                    uint32_t tx_amount_1;
-                    uint32_t tx_amount_2;
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
@@ -1370,45 +1398,22 @@ void sample_main(void) {
                         parse_cbor_transaction();
                     }
 
-                    uint32_t tx = 0;
+
 
                     if(operationContext.fullMessageHash) {
 
-                        G_io_apdu_buffer[tx++] = &operationContext.finalUTXOCount;
-                        G_io_apdu_buffer[tx++] = 0xFF;
+                        UX_DISPLAY(bagl_ui_approval_preview_tx_nanos, NULL);
+                        flags |= IO_ASYNCH_REPLY;
 
-                        for (int i=0; i < operationContext.finalUTXOCount; i++ ) {
-                          os_memmove(G_io_apdu_buffer + tx,
-                            &operationContext.addressData[i], 4);
-                          tx += 4;
-                          G_io_apdu_buffer[tx++] = 0xFF;
-
-                          //Using uint32_t example needs to double index for each address
-                          //os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i*2], 8);
-
-                          os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i], 8);
-                          tx += 8;
-
-                          //os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i+1], 4);
-                          //tx += 4;
-
-                          G_io_apdu_buffer[tx++] = 0xFF;
-                        }
-                        //os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionLength, 4);
-                        //tx += 4;
-                        //os_memmove(G_io_apdu_buffer + tx, &dataLength, 4);
-                        //tx += 4;
-                        //os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionOffset, 4);
-                        //tx += 4;
-                        //os_memmove(G_io_apdu_buffer + tx, operationContext.message, 200);
-                        //tx += 200;
+                    } else {
+                        uint32_t tx = 0;
+                        G_io_apdu_buffer[tx++] = 0x90;
+                        G_io_apdu_buffer[tx++] = 0x00;
+                        // Send back the response, do not restart the event loop
+                        io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+                        // Display back the original UX
+                        ui_idle();
                     }
-                    G_io_apdu_buffer[tx++] = 0x90;
-                    G_io_apdu_buffer[tx++] = 0x00;
-                    // Send back the response, do not restart the event loop
-                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-                    // Display back the original UX
-                    ui_idle();
                 }
 
                 break;
