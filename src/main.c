@@ -319,7 +319,7 @@ const bagl_element_t bagl_ui_preview_tx_nanos[] = {
         NULL,
     },
     {
-        {BAGL_ICON, 0x00, 0, 12, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+        {BAGL_ICON, 0x00, 0, 4, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
          BAGL_GLYPH_ICON_LEFT},
         NULL,
         0,
@@ -330,7 +330,7 @@ const bagl_element_t bagl_ui_preview_tx_nanos[] = {
         NULL,
     },
     {
-        {BAGL_ICON, 0x00, 120, 12, 8, 6, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+        {BAGL_ICON, 0x00, 120, 4, 8, 6, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
          BAGL_GLYPH_ICON_RIGHT},
         NULL,
         0,
@@ -783,7 +783,7 @@ unsigned short ada_print_amount(uint64_t amount, char *out,
         base /= 10;
     }
     tmp[i] = '\0';
-    strcpy(tmp2, "ADA ");
+    //strcpy(tmp2, "");
     adjustDecimals(tmp, i, tmp2 + 4, 25, 6);
     if (strlen(tmp2) < outlen - 1) {
         strcpy(out, tmp2);
