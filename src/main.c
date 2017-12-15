@@ -576,8 +576,8 @@ void parse_cbor_transaction() {
   cbor_init(&stream, operationContext.message, operationContext.transactionLength);
 
   uint8_t array_length;
-  uint32_t int_value;
-  bool at_tag = false;
+  //uint32_t int_value;
+  //bool at_tag = false;
   bool error = false;
   uint8_t itx_count = 0;
   uint8_t otx_count = 0;
@@ -620,10 +620,6 @@ void parse_cbor_transaction() {
   }
 
   // Scan through Output TXs
-  size_t int_size;
-  //int64_t addr_checksum;
-  int new_offset = cbor_deserialize_array_indefinite(&stream, offset);
-
   if(cbor_deserialize_array_indefinite(&stream, offset) ) {
       offset ++;
 
@@ -768,7 +764,7 @@ bool adjustDecimals(char *src, uint32_t srcLength, char *target,
     return true;
 }
 
-unsigned short ada_print_amount(uint64_t amount, uint8_t *out,
+unsigned short ada_print_amount(uint64_t amount, char *out,
                                 uint32_t outlen) {
     char tmp[20];
     char tmp2[25];
@@ -901,6 +897,8 @@ unsigned int prepare_tx_preview_ui() {
     ui_strings[1] = "To Address";
     ui_strings[2] = "TX Fee ADA";
 
+    uint64_t fee = 0x00000000;
+
     os_memset(tx.ui_label, 0, 32);
     os_memset(tx.ui_value, 0, 32);
 
@@ -909,7 +907,7 @@ unsigned int prepare_tx_preview_ui() {
 
     if(tx.tx_ui_step == (tx.otx_count * 2)) {
         os_memmove(tx.ui_label, ui_strings[2], 32);
-        ada_print_amount("0.00", tx.ui_value, 32);
+        ada_print_amount(fee, tx.ui_value, 32);
     } else if(tx.tx_ui_step % 2 == 0) { // EVEN TX AMOUNT
         os_memmove(tx.ui_label, ui_strings[0], 32);
         ada_print_amount(operationContext.txAmountData[tx_amount_index], tx.ui_value, 32);
@@ -917,13 +915,15 @@ unsigned int prepare_tx_preview_ui() {
         os_memmove(tx.ui_label, ui_strings[1], 32);
         ada_print_amount(operationContext.addressData[tx_address_index], tx.ui_value, 32);
     }
+
+    return 0;
 }
 
 
 unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
 
     uint32_t tx = 0;
-    G_io_apdu_buffer[tx++] = &operationContext.finalUTXOCount;
+    G_io_apdu_buffer[tx++] = operationContext.finalUTXOCount;
     G_io_apdu_buffer[tx++] = 0xFF;
 
     for (int i=0; i < operationContext.finalUTXOCount; i++ ) {
@@ -959,7 +959,7 @@ unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e) {
     //TODO: Cleanup transaction data
 
     uint32_t tx = 0;
-    G_io_apdu_buffer[tx++] = &operationContext.finalUTXOCount;
+    G_io_apdu_buffer[tx++] = operationContext.finalUTXOCount;
     G_io_apdu_buffer[tx++] = 0x00;
 
     G_io_apdu_buffer[tx++] = 0x90;
@@ -1275,7 +1275,7 @@ void sample_main(void) {
                         // First APDU contains total transaction length
                         operationContext.transactionLength = dataLength;
 
-                        if(p2 = P2_MULTI_TX) {
+                        if(p2 == P2_MULTI_TX) {
                             dataLength = MAX_CHUNK_SIZE;
                         } else if (p2 != P2_SINGLE_TX) {
                             THROW(0x6B02);
@@ -1372,7 +1372,7 @@ void sample_main(void) {
                             THROW(0x6B01);
                         }
                         */
-                        if(p2 = P2_MULTI_TX) {
+                        if(p2 == P2_MULTI_TX) {
                             dataLength = MAX_CHUNK_SIZE;
                         } else if (p2 != P2_SINGLE_TX) {
                             THROW(0x6B02);
