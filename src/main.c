@@ -91,22 +91,16 @@ typedef struct operationContext_t {
     bool fullMessageHash;
     bool getPublicKey;
     bool usePassedInIndex;
-    uint8_t hashData[32];
-    uint8_t userName[MAX_USER_NAME + 1]; // TODO: Remove
     uint8_t message[MAX_MSG];
     uint32_t messageLength;
     uint64_t transactionLength;
     uint32_t transactionOffset;
     uint8_t finalUTXOCount;
-    uint32_t addressData[32];
-    uint64_t txAmountData[32];
+    uint32_t addressData[16];
+    uint64_t txAmountData[16];
     uint8_t hashTX[32];
     uint8_t outputTxCount;
 } operationContext_t;
-
-char ui_send_ada_to_label[] = "Send ADA";
-char ui_send_to_address_label[] = "To Address";
-char ui_tx_fee_label[] = "TX Fee ADA";
 
 char * ui_strings[4];
 
@@ -657,15 +651,6 @@ void parse_cbor_transaction() {
                        ((uint64_t)txAmount[3] << 32) | ((uint64_t)txAmount[2] << 40) |
                        ((uint64_t)txAmount[1] << 48) | ((uint64_t)txAmount[0] << 56);
 
-              /*
-              uint8_t txAmountIndex = (otx_count - 1) * 2;
-              operationContext.txAmountData[txAmountIndex] =
-                  (txAmount[3] << 24) | (txAmount[2] << 16) |
-                  (txAmount[1] << 8) | (txAmount[0]);
-              operationContext.txAmountData[txAmountIndex + 1] =
-                  (txAmount[7] << 24) | (txAmount[6] << 16) |
-                  (txAmount[5] << 8) | (txAmount[4]);
-              */
               offset += 8;
           } else {
               error = true;
@@ -1082,6 +1067,7 @@ void sample_main(void) {
 
                 switch (G_io_apdu_buffer[1]) {
 
+                #ifdef INS_GET_WALLET_INDEX_FUNC
                 case INS_GET_WALLET_INDEX: {
                     uint8_t privateKeyData[32];
                     uint32_t i;
@@ -1116,7 +1102,9 @@ void sample_main(void) {
                 }
 
                 break;
+                #endif //INS_GET_WALLET_INDEX_FUNC
 
+                #ifdef INS_GET_RND_PUB_KEY_FUNC
                 case INS_GET_RND_PUB_KEY: {
                     uint8_t privateKeyData[32];
                     cx_ecfp_private_key_t privateKey;
@@ -1193,7 +1181,9 @@ void sample_main(void) {
                 }
 
                 break;
+                #endif //INS_GET_RND_PUB_KEY_FUNC
 
+                #ifdef INS_GET_PUBLIC_KEY_FUNC
                 case INS_GET_PUBLIC_KEY: {
                     uint8_t privateKeyData[32];
                     uint32_t i;
@@ -1259,9 +1249,9 @@ void sample_main(void) {
                 }
 
                 break;
+                #endif //INS_GET_PUBLIC_KEY_FUNC
 
-
-
+                #ifdef INS_HASH_FUNC
                 case INS_HASH: {
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
@@ -1277,7 +1267,7 @@ void sample_main(void) {
                         // First APDU contains total transaction length
                         operationContext.transactionLength = dataLength;
 
-                        if (p2 = P2_MULTI_TX) {
+                        if (p2 == P2_MULTI_TX) {
                             dataLength = MAX_CHUNK_SIZE;
                         }
 
@@ -1344,6 +1334,7 @@ void sample_main(void) {
                 }
 
                 break;
+                #endif //INS_HASH_FUNC
 
 
 
@@ -1352,8 +1343,7 @@ void sample_main(void) {
 
 
 
-
-
+                #ifdef INS_SIGN_TX_FUNC
                 case INS_SIGN_TX: {
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
@@ -1422,6 +1412,7 @@ void sample_main(void) {
                 }
 
                 break;
+                #endif //INS_SIGN_TX_FUNC
 
                 case 0xFF: // return to dashboard
                     os_sched_exit(0);
