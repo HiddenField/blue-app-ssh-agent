@@ -62,7 +62,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define P2_CURVE25519 0x02
 #define P2_RANDOM_INDEX 0x04
 #define P2_PASSED_IN_INDEX 0x06
-#define P2_SINGLE_TX 0x01
+#define P2_SINGLE_TX 0x00
 #define P2_MULTI_TX 0x02
 
 #define OFFSET_CLA 0
@@ -1051,6 +1051,8 @@ void sample_main(void) {
     volatile unsigned int tx = 0;
     volatile unsigned int flags = 0;
 
+
+
     // DESIGN NOTE: the bootloader ignores the way APDU are fetched. The only
     // goal is to retrieve APDU.
     // When APDU are to be fetched from multiple IOs, like NFC+USB+BLE, make
@@ -1275,11 +1277,10 @@ void sample_main(void) {
                         // First APDU contains total transaction length
                         operationContext.transactionLength = dataLength;
 
-                        if(p2 == P2_MULTI_TX) {
+                        if (p2 = P2_MULTI_TX) {
                             dataLength = MAX_CHUNK_SIZE;
-                        } else if (p2 != P2_SINGLE_TX) {
-                            THROW(0x6B02);
                         }
+
                         operationContext.transactionOffset = 0;
                         operationContext.fullMessageHash = false;
                     } else if (p1 != P1_NEXT) {
@@ -1300,7 +1301,7 @@ void sample_main(void) {
 
 
                     if(operationContext.fullMessageHash) {
-                        parse_cbor_transaction();
+
                         int error = blake2b( operationContext.hashTX,
                                  32,
                                  operationContext.message,
@@ -1330,7 +1331,7 @@ void sample_main(void) {
                         G_io_apdu_buffer[tx++] = 0x20;
                         //os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionLength, 8);
                         //tx += 8;
-                        os_memmove(G_io_apdu_buffer + tx, &operationContext.hashTX, 32);
+                        os_memmove(G_io_apdu_buffer + tx, operationContext.hashTX, 32);
                         tx += 32;
                     }
 
