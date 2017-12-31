@@ -105,8 +105,8 @@ typedef struct operationContext_t {
 char * ui_strings[4];
 
 struct {
-    char ui_label[32];
-    char ui_value[32];
+    volatile char ui_label[32];
+    volatile char ui_value[32];
     uint8_t tx_ui_step;
     uint8_t otx_count;
 } tx;
@@ -114,7 +114,8 @@ struct {
 char keyPath[200];
 operationContext_t operationContext;
 
-
+char ada_print_amount_tmp[20];
+char ada_print_amount_tmp_2[25];
 
 
 
@@ -751,27 +752,31 @@ bool adjustDecimals(char *src, uint32_t srcLength, char *target,
 
 unsigned short ada_print_amount(uint64_t amount, char *out,
                                 uint32_t outlen) {
-    char tmp[20];
-    char tmp2[25];
+
+    os_memset(ada_print_amount_tmp, 0, 20);
+    os_memset(ada_print_amount_tmp_2, 0, 25);
+
     uint32_t numDigits = 0, i;
     uint64_t base = 1;
     while (base <= amount) {
         base *= 10;
         numDigits++;
     }
-    if (numDigits > sizeof(tmp) - 1) {
+    if (numDigits > sizeof(ada_print_amount_tmp) - 1) {
         THROW(EXCEPTION);
     }
     base /= 10;
     for (i = 0; i < numDigits; i++) {
-        tmp[i] = '0' + ((amount / base) % 10);
+        ada_print_amount_tmp[i] = '0' + ((amount / base) % 10);
         base /= 10;
     }
-    tmp[i] = '\0';
-    //strcpy(tmp2, "");
-    adjustDecimals(tmp, i, tmp2 + 4, 25, 6);
-    if (strlen(tmp2) < outlen - 1) {
-        strcpy(out, tmp2);
+    ada_print_amount_tmp[i] = '\0';
+    //strcpy(ada_print_amount_tmp_2, "");
+    //adjustDecimals(ada_print_amount_tmp, i, ada_print_amount_tmp_2 + 4, 25, 6);
+    //if (strlen(ada_print_amount_tmp_2) < outlen - 1) {
+    if (strlen(ada_print_amount_tmp) < outlen - 1) {
+        //strcpy(out, ada_print_amount_tmp_2);
+        os_memmove(out, ada_print_amount_tmp, 32);
     } else {
         out[0] = '\0';
     }
@@ -896,9 +901,17 @@ unsigned int prepare_tx_preview_ui() {
     } else if(tx.tx_ui_step % 2 == 0) { // EVEN TX AMOUNT
         os_memmove(tx.ui_label, ui_strings[0], 32);
         ada_print_amount(operationContext.txAmountData[tx_amount_index], tx.ui_value, 32);
+        //ada_print_amount(tx_amount_index, tx.ui_value, 31);
+        //os_memmove(tx.ui_value, &operationContext.txAmountData[tx_amount_index], 32);
+        //tx.ui_value[31] = '\0';
+        //SPRINTF(tx.ui_value, "%u", operationContext.txAmountData[tx_amount_index]);
     } else {  // ODD TX ADDRESS
         os_memmove(tx.ui_label, ui_strings[1], 32);
         ada_print_amount(operationContext.addressData[tx_address_index], tx.ui_value, 32);
+        //ada_print_amount(tx_address_index, tx.ui_value, 31);
+        //os_memmove(tx.ui_value, &operationContext.addressData[tx_address_index], 32);
+        //tx.ui_value[31] = '\0';
+        //SPRINTF(tx.ui_value, "%u", operationContext.addressData[tx_address_index]);
     }
 
     return 0;
