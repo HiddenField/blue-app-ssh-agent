@@ -105,8 +105,8 @@ typedef struct operationContext_t {
 char * ui_strings[4];
 
 struct {
-    volatile char ui_label[32];
-    volatile char ui_value[32];
+    char ui_label[32];
+    char ui_value[32];
     uint8_t tx_ui_step;
     uint8_t otx_count;
 } tx;
