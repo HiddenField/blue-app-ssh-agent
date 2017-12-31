@@ -114,8 +114,8 @@ struct {
 char keyPath[200];
 operationContext_t operationContext;
 
-char ada_print_amount_tmp[20];
-char ada_print_amount_tmp_2[25];
+char ada_print_amount_tmp[32];
+char ada_print_amount_tmp_2[32];
 
 
 
@@ -753,8 +753,8 @@ bool adjustDecimals(char *src, uint32_t srcLength, char *target,
 unsigned short ada_print_amount(uint64_t amount, char *out,
                                 uint32_t outlen) {
 
-    os_memset(ada_print_amount_tmp, 0, 20);
-    os_memset(ada_print_amount_tmp_2, 0, 25);
+    os_memset(ada_print_amount_tmp, 0, 32);
+    os_memset(ada_print_amount_tmp_2, 0, 32);
 
     uint32_t numDigits = 0, i;
     uint64_t base = 1;
@@ -772,11 +772,11 @@ unsigned short ada_print_amount(uint64_t amount, char *out,
     }
     ada_print_amount_tmp[i] = '\0';
     //strcpy(ada_print_amount_tmp_2, "");
-    //adjustDecimals(ada_print_amount_tmp, i, ada_print_amount_tmp_2 + 4, 25, 6);
-    //if (strlen(ada_print_amount_tmp_2) < outlen - 1) {
-    if (strlen(ada_print_amount_tmp) < outlen - 1) {
+    adjustDecimals(ada_print_amount_tmp, i, ada_print_amount_tmp_2, 32, 6);
+    if (strlen(ada_print_amount_tmp_2) < outlen - 1) {
+    //if (strlen(ada_print_amount_tmp) < outlen - 1) {
         //strcpy(out, ada_print_amount_tmp_2);
-        os_memmove(out, ada_print_amount_tmp, 32);
+        os_memmove(out, ada_print_amount_tmp_2, 32);
     } else {
         out[0] = '\0';
     }
