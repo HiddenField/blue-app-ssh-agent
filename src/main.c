@@ -20,6 +20,7 @@
 #include "cx.h"
 #include "blake2.h"
 #include "blake2-impl.h"
+#include "adaBase58.h"
 
 #include "os_io_seproxyhal.h"
 #include <string.h>
@@ -57,6 +58,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define INS_SIGN_TX 0x06
 #define INS_GET_RND_PUB_KEY 0x0C
 #define INS_GET_WALLET_INDEX 0x0E
+#define INS_BASE58_ENCODE_TEST 0x08
 #define P1_FIRST 0x01
 #define P1_NEXT 0x02
 #define P2_CURVE25519 0x02
@@ -71,6 +73,39 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define OFFSET_P2 3
 #define OFFSET_LC 4
 #define OFFSET_CDATA 5
+
+/*
+static const unsigned char address_pre_base64[] = {
+    0x82, 0xd8, 0x18, 0x58, 0x4a, 0x83, 0x58, 0x1c,
+    0xe7, 0xfe, 0x8e, 0x46, 0x8d, 0x22, 0x49, 0xf1,
+    0x8c, 0xd7, 0xbf, 0x9a, 0xec, 0x0d, 0x43, 0x74,
+    0xb7, 0xd3, 0xe1, 0x86, 0x09, 0xed, 0xe8, 0x58,
+    0x9f, 0x82, 0xf7, 0xf0, 0xa2, 0x00, 0x58, 0x20,
+    0x82, 0x00, 0x58, 0x1c, 0x24, 0x05, 0x96, 0xb9,
+    0xb6, 0x3f, 0xc0, 0x10, 0xc0, 0x6f, 0xbe, 0x92,
+    0xcf, 0x6f, 0x82, 0x05, 0x87, 0x40, 0x65, 0x34,
+    0x79, 0x59, 0x58, 0xc4, 0x11, 0xe6, 0x62, 0xdc,
+    0x01, 0x44, 0x43, 0xc0, 0x68, 0x8e, 0x00, 0x1a,
+    0x67, 0x68, 0xcc, 0x86 };
+*/
+/* //Reversed
+static const unsigned char address_pre_base64[] = {
+    0x86, 0xcc, 0x68, 0x67, 0x1a, 0x00, 0x8e, 0x68,
+    0xc0, 0x43, 0x44, 0x01, 0xdc, 0x62, 0xe6, 0x11,
+    0xc4, 0x58, 0x59, 0x79, 0x34, 0x65, 0x40, 0x87,
+    0x05, 0x82, 0x6f, 0xcf, 0x92, 0xbe, 0x6f, 0xc0,
+    0x10, 0xc0, 0x3f, 0xb6, 0xb9, 0x96, 0x05, 0x24,
+    0x1c, 0x58, 0x00, 0x82, 0x20, 0x58, 0x00, 0xa2,
+    0xf0, 0xf7, 0x82, 0x9f, 0x58, 0xe8, 0xed, 0x09,
+    0x86, 0xe1, 0xd3, 0xb7, 0x74, 0x43, 0x0d, 0xec,
+    0x9a, 0xbf, 0xd7, 0x8c, 0xf1, 0x49, 0x22, 0x8d,
+    0x46, 0x8e, 0xfe, 0xe7, 0x1c, 0x58, 0x83, 0x4a,
+    0x58, 0x18, 0xd8, 0x82 };
+*/
+
+
+unsigned char address_pre_base64[140];
+unsigned char address_base64_encoded[140];
 
 unsigned char G_io_seproxyhal_spi_buffer[IO_SEPROXYHAL_BUFFER_SIZE_B];
 
@@ -109,7 +144,7 @@ struct {
     char ui_value[32];
     uint8_t tx_ui_step;
     uint8_t otx_count;
-} tx;
+} tx_ui_t;
 
 char keyPath[200];
 operationContext_t operationContext;
@@ -294,7 +329,7 @@ const bagl_element_t bagl_ui_preview_tx_nanos[] = {
     {
         {BAGL_LABELINE, 0x00, 0, 12, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
          BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-        tx.ui_label,
+        tx_ui_t.ui_label,
         0,
         0,
         0,
@@ -305,7 +340,7 @@ const bagl_element_t bagl_ui_preview_tx_nanos[] = {
     {
         {BAGL_LABELINE, 0x00, 0, 28, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
          BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-        tx.ui_value,
+        tx_ui_t.ui_value,
         0,
         0,
         0,
@@ -827,20 +862,20 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e) {
 }
 
 unsigned int io_seproxyhal_touch_preview_ok(const bagl_element_t *e) {
-    tx.tx_ui_step = 0;
-    tx.otx_count = operationContext.finalUTXOCount;
+    tx_ui_t.tx_ui_step = 0;
+    tx_ui_t.otx_count = operationContext.finalUTXOCount;
 
     prepare_tx_preview_ui();
 
     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
 
-    //snprintf(tx.ui_label, 65, "%.*H", 32, tx.ui_label);
+    //snprintf(tx_ui_t.ui_label, 65, "%.*H", 32, tx_ui_t.ui_label);
 
     return 0;
 }
 
 unsigned int io_seproxyhal_touch_preview_cancel(const bagl_element_t *e) {
-    tx.tx_ui_step = -1;
+    tx_ui_t.tx_ui_step = -1;
     // TODO: Wipe TX and all data
     ui_idle();
 
@@ -848,9 +883,9 @@ unsigned int io_seproxyhal_touch_preview_cancel(const bagl_element_t *e) {
 }
 
 unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e) {
-    if(tx.tx_ui_step > 0) {  // GO BACK
+    if(tx_ui_t.tx_ui_step > 0) {  // GO BACK
 
-        tx.tx_ui_step--;
+        tx_ui_t.tx_ui_step--;
 
     } else { // EXIT
 
@@ -867,11 +902,11 @@ unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e) {
 
 unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e) {
 
-    if(tx.tx_ui_step == (tx.otx_count * 2)) {  // CONTINUE TO SIGN
+    if(tx_ui_t.tx_ui_step == (tx_ui_t.otx_count * 2)) {  // CONTINUE TO SIGN
         UX_DISPLAY(bagl_ui_sign_tx_nanos, NULL);
         return 0;
     } else {  // SHOW NEXT
-        tx.tx_ui_step++;
+        tx_ui_t.tx_ui_step++;
     }
 
     prepare_tx_preview_ui();
@@ -889,29 +924,29 @@ unsigned int prepare_tx_preview_ui() {
 
     uint64_t fee = 0x00000000;
 
-    os_memset(tx.ui_label, 0, 32);
-    os_memset(tx.ui_value, 0, 32);
+    os_memset(tx_ui_t.ui_label, 0, 32);
+    os_memset(tx_ui_t.ui_value, 0, 32);
 
-    int tx_amount_index = tx.tx_ui_step/2;
-    int tx_address_index = (tx.tx_ui_step -1)/2;
+    int tx_amount_index = tx_ui_t.tx_ui_step/2;
+    int tx_address_index = (tx_ui_t.tx_ui_step -1)/2;
 
-    if(tx.tx_ui_step == (tx.otx_count * 2)) {
-        os_memmove(tx.ui_label, ui_strings[2], 32);
-        ada_print_amount(fee, tx.ui_value, 32);
-    } else if(tx.tx_ui_step % 2 == 0) { // EVEN TX AMOUNT
-        os_memmove(tx.ui_label, ui_strings[0], 32);
-        ada_print_amount(operationContext.txAmountData[tx_amount_index], tx.ui_value, 32);
-        //ada_print_amount(tx_amount_index, tx.ui_value, 31);
-        //os_memmove(tx.ui_value, &operationContext.txAmountData[tx_amount_index], 32);
-        //tx.ui_value[31] = '\0';
-        //SPRINTF(tx.ui_value, "%u", operationContext.txAmountData[tx_amount_index]);
+    if(tx_ui_t.tx_ui_step == (tx_ui_t.otx_count * 2)) {
+        os_memmove(tx_ui_t.ui_label, ui_strings[2], 32);
+        ada_print_amount(fee, tx_ui_t.ui_value, 32);
+    } else if(tx_ui_t.tx_ui_step % 2 == 0) { // EVEN TX AMOUNT
+        os_memmove(tx_ui_t.ui_label, ui_strings[0], 32);
+        ada_print_amount(operationContext.txAmountData[tx_amount_index], tx_ui_t.ui_value, 32);
+        //ada_print_amount(tx_amount_index, tx_ui_t.ui_value, 31);
+        //os_memmove(tx_ui_t.ui_value, &operationContext.txAmountData[tx_amount_index], 32);
+        //tx_ui_t.ui_value[31] = '\0';
+        //SPRINTF(tx_ui_t.ui_value, "%u", operationContext.txAmountData[tx_amount_index]);
     } else {  // ODD TX ADDRESS
-        os_memmove(tx.ui_label, ui_strings[1], 32);
-        ada_print_amount(operationContext.addressData[tx_address_index], tx.ui_value, 32);
-        //ada_print_amount(tx_address_index, tx.ui_value, 31);
-        //os_memmove(tx.ui_value, &operationContext.addressData[tx_address_index], 32);
-        //tx.ui_value[31] = '\0';
-        //SPRINTF(tx.ui_value, "%u", operationContext.addressData[tx_address_index]);
+        os_memmove(tx_ui_t.ui_label, ui_strings[1], 32);
+        ada_print_amount(operationContext.addressData[tx_address_index], tx_ui_t.ui_value, 32);
+        //ada_print_amount(tx_address_index, tx_ui_t.ui_value, 31);
+        //os_memmove(tx_ui_t.ui_value, &operationContext.addressData[tx_address_index], 32);
+        //tx_ui_t.ui_value[31] = '\0';
+        //SPRINTF(tx_ui_t.ui_value, "%u", operationContext.addressData[tx_address_index]);
     }
 
     return 0;
@@ -1264,6 +1299,9 @@ void sample_main(void) {
                 break;
                 #endif //INS_GET_PUBLIC_KEY_FUNC
 
+
+
+
                 #ifdef INS_HASH_FUNC
                 case INS_HASH: {
 
@@ -1426,6 +1464,63 @@ void sample_main(void) {
 
                 break;
                 #endif //INS_SIGN_TX_FUNC
+
+
+
+
+
+                #ifdef INS_BASE58_ENCODE_TEST_FUNC
+                case INS_BASE58_ENCODE_TEST: {
+
+                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
+                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
+                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+                    uint32_t dataLength =
+                        (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
+                        (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
+                    dataBuffer += 4;
+
+                    os_memset(address_pre_base64, G_io_apdu_buffer, 140);
+                    os_memset(address_base64_encoded, 0, 140);
+
+                    os_memmove(address_pre_base64, dataBuffer, dataLength);
+
+                    unsigned char address_length = ada_encode_base58(address_pre_base64, dataLength,
+                      address_base64_encoded, 140);
+
+                    // Display Address
+                    /*
+                    os_memset(tx_ui_t.ui_label, 0, 32);
+                    os_memset(tx_ui_t.ui_value, 0, 32);
+                    os_memmove(tx_ui_t.ui_value, address_base64_encoded, 5);
+                    os_memmove(tx_ui_t.ui_value + 5, "...", 3);
+                    tx_ui_t.ui_value[8] = '\0';
+                    UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
+                    flags |= IO_ASYNCH_REPLY;
+                    */
+
+
+                    uint32_t tx = 0;
+
+                    G_io_apdu_buffer[tx++] = address_length;
+
+                    os_memmove(G_io_apdu_buffer + tx, address_base64_encoded, address_length);
+                    tx += address_length;
+                    G_io_apdu_buffer[tx++] = 0x90;
+                    G_io_apdu_buffer[tx++] = 0x00;
+                    // Send back the response, do not restart the event loop
+                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+                    // Display back the original UX
+                    ui_idle();
+
+                }
+
+                break;
+                #endif //INS_BASE58_ENCODE_TEST_FUNC
+
+
+
+
 
                 case 0xFF: // return to dashboard
                     os_sched_exit(0);
