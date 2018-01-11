@@ -45,6 +45,9 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define MAX_USER_NAME 20
 #define MAX_CHUNK_SIZE 55
 #define MAX_MSG 1023
+#define MAX_TX_OUTPUTS 4
+#define MAX_CHAR_PER_ADDR 13
+#define MAX_ADDR_OUT_LENGTH 200
 
 #define ADA_COIN_TYPE 0x717
 #define ADA_ADDR_PATH_LEN 0x05
@@ -75,7 +78,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define OFFSET_CDATA 5
 
 unsigned char address_pre_base64[140];
-unsigned char address_base64_encoded[140];
+unsigned char address_base58_encoded[MAX_ADDR_OUT_LENGTH];
 
 unsigned char G_io_seproxyhal_spi_buffer[IO_SEPROXYHAL_BUFFER_SIZE_B];
 
@@ -108,6 +111,10 @@ typedef struct operationContext_t {
 } operationContext_t;
 
 char * ui_strings[4];
+char * ui_addresses[MAX_TX_OUTPUTS][MAX_CHAR_PER_ADDR];
+
+uint8_t raw_address_length;
+uint8_t base58_address_length;
 
 struct {
     char ui_label[32];
@@ -632,6 +639,10 @@ void parse_cbor_transaction() {
           // Skip tag
           offset += 4;
           if(operationContext.message[offset] == 0x58) {
+
+              uint8_t *addres_start_index = operationContext.message + offset - 3;
+              //THROW(0x6600 + operationContext.message[addres_start_index+1]);
+
               array_length = operationContext.message[++offset];
               // Skip Array Length
               offset += array_length +1;
@@ -640,11 +651,51 @@ void parse_cbor_transaction() {
               //offset += cbor_deserialize_int64_t(&stream, offset, &addr_checksum);
               // Skip CBOR int type
               offset++;
+
               uint8_t *checkSum = operationContext.message + offset;
               operationContext.addressData[otx_count-1] =
                   (checkSum[3] << 24) | (checkSum[2] << 16) |
                   (checkSum[1] << 8) | (checkSum[0]);
+
               offset += 4;
+
+
+
+
+              // End of address at this offset
+
+
+              // Base58 Encode Address
+              raw_address_length = array_length + 9;
+
+              //os_memset(address_pre_base64, 0, 140);
+              os_memset(address_base58_encoded, 0, MAX_ADDR_OUT_LENGTH);
+              //os_memmove(address_pre_base64, operationContext.message + addres_start_index, raw_address_length );
+              base58_address_length = ada_encode_base58(addres_start_index, raw_address_length,
+                address_base58_encoded, MAX_ADDR_OUT_LENGTH);
+
+
+              // Capture address UI here
+              /*
+              // Attempt without Base58 Encoding
+              os_memset(ui_addresses[otx_count-1], 0, MAX_CHAR_PER_ADDR);
+              os_memmove(ui_addresses[otx_count-1], addres_start_index , 5);
+              os_memmove(ui_addresses[otx_count-1] + 5, "...", 3);
+              os_memmove(ui_addresses[otx_count-1] + 8, addres_start_index + raw_address_length - 5, 5);
+              ui_addresses[otx_count-1][MAX_CHAR_PER_ADDR] = '\0';
+              */
+              // Attempt WITH Base58 Encoding
+
+              char * ui_address = ui_addresses[otx_count-1];
+
+              os_memset(ui_address, 0, MAX_CHAR_PER_ADDR);
+              os_memmove(ui_address, address_base58_encoded, 5);
+              os_memmove(ui_address + 5, "...", 3);
+              os_memmove(ui_address + 8, address_base58_encoded + base58_address_length - 5, 5);
+              ui_addresses[otx_count-1][8] = '\0';
+
+
+
               //offset += cbor_deserialize_int64_t(&stream, offset, &addr_checksum);
               // Skip CBOR int type
               offset++;
@@ -912,7 +963,12 @@ unsigned int prepare_tx_preview_ui() {
         //SPRINTF(tx_ui_t.ui_value, "%u", operationContext.txAmountData[tx_amount_index]);
     } else {  // ODD TX ADDRESS
         os_memmove(tx_ui_t.ui_label, ui_strings[1], 32);
-        ada_print_amount(operationContext.addressData[tx_address_index], tx_ui_t.ui_value, 32);
+        os_memmove(tx_ui_t.ui_value, ui_addresses[tx_address_index], MAX_CHAR_PER_ADDR);
+
+        //ada_print_amount(operationContext.addressData[tx_address_index], tx_ui_t.ui_value, 32);
+
+        //ada_print_amount(ui_addresses[tx_address_index], tx_ui_t.ui_value, MAX_CHAR_PER_ADDR);
+
         //ada_print_amount(tx_address_index, tx_ui_t.ui_value, 31);
         //os_memmove(tx_ui_t.ui_value, &operationContext.addressData[tx_address_index], 32);
         //tx_ui_t.ui_value[31] = '\0';
@@ -1451,18 +1507,18 @@ void sample_main(void) {
                     dataBuffer += 4;
 
                     os_memset(address_pre_base64, G_io_apdu_buffer, 140);
-                    os_memset(address_base64_encoded, 0, 140);
+                    os_memset(address_base58_encoded, 0, 140);
 
                     os_memmove(address_pre_base64, dataBuffer, dataLength);
 
                     unsigned char address_length = ada_encode_base58(address_pre_base64, dataLength,
-                      address_base64_encoded, 140);
+                      address_base58_encoded, 140);
 
                     // Display Address
                     /*
                     os_memset(tx_ui_t.ui_label, 0, 32);
                     os_memset(tx_ui_t.ui_value, 0, 32);
-                    os_memmove(tx_ui_t.ui_value, address_base64_encoded, 5);
+                    os_memmove(tx_ui_t.ui_value, address_base58_encoded, 5);
                     os_memmove(tx_ui_t.ui_value + 5, "...", 3);
                     tx_ui_t.ui_value[8] = '\0';
                     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
@@ -1474,7 +1530,7 @@ void sample_main(void) {
 
                     G_io_apdu_buffer[tx++] = address_length;
 
-                    os_memmove(G_io_apdu_buffer + tx, address_base64_encoded, address_length);
+                    os_memmove(G_io_apdu_buffer + tx, address_base58_encoded, address_length);
                     tx += address_length;
                     G_io_apdu_buffer[tx++] = 0x90;
                     G_io_apdu_buffer[tx++] = 0x00;

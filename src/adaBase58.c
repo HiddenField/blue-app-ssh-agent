@@ -21,8 +21,8 @@ static const unsigned char BASE58ALPHABET[] = "123456789ABCDEFGHJKLMNPQRSTUVWXYZ
 
 unsigned char ada_encode_base58(unsigned char *in, unsigned char length,
                                 unsigned char *out, unsigned char maxoutlen) {
-    unsigned char tmp[264];
-    unsigned char buffer[264];
+    unsigned char tmp[512];
+    unsigned char buffer[512];
     unsigned char j;
     unsigned char startAt;
     unsigned char zeroCount = 0;
