@@ -107,15 +107,18 @@ typedef struct operationContext_t {
     uint32_t addressData[16];
     uint64_t txAmountData[16];
     uint8_t hashTX[32];
-    uint8_t outputTxCount;
 } operationContext_t;
 
-char * ui_strings[4];
-char * ui_addresses[MAX_TX_OUTPUTS][MAX_CHAR_PER_ADDR];
 
+char * ui_addresses[MAX_TX_OUTPUTS][MAX_CHAR_PER_ADDR];
+char *ui_address_ptr;
 uint8_t raw_address_length;
 uint8_t base58_address_length;
+uint8_t *checkSumPtr;
+uint8_t *address_start_index;
+uint8_t *txAmount;
 
+char * ui_strings[4];
 struct {
     char ui_label[32];
     char ui_value[32];
@@ -587,7 +590,7 @@ void parse_cbor_transaction() {
   //bool at_tag = false;
   bool error = false;
   uint8_t itx_count = 0;
-  uint8_t otx_count = 0;
+  uint8_t otx_index = 0;
 
   uint32_t offset = cbor_deserialize_array(&stream, 0, &array_length);
   if(offset != 1) { THROW(0x6DDE); }
@@ -627,11 +630,11 @@ void parse_cbor_transaction() {
   }
 
   // Scan through Output TXs
+  operationContext.finalUTXOCount = 0;
   if(cbor_deserialize_array_indefinite(&stream, offset) ) {
       offset ++;
 
       while(!cbor_at_break(&stream, offset) && !error) {
-          otx_count++;
           // TODO: These methods are returning 0 on the
           // Ledger. Work out why...
           //offset += cbor_deserialize_array(&stream, offset, &array_length);
@@ -640,10 +643,10 @@ void parse_cbor_transaction() {
           offset += 4;
           if(operationContext.message[offset] == 0x58) {
 
-              uint8_t *addres_start_index = operationContext.message + offset - 3;
-              //THROW(0x6600 + operationContext.message[addres_start_index+1]);
+              address_start_index = operationContext.message + offset - 3;
 
               array_length = operationContext.message[++offset];
+              //THROW(0x6600 + array_length);
               // Skip Array Length
               offset += array_length +1;
               // TODO: These methods are returning 0 on the
@@ -652,68 +655,72 @@ void parse_cbor_transaction() {
               // Skip CBOR int type
               offset++;
 
-              uint8_t *checkSum = operationContext.message + offset;
-              operationContext.addressData[otx_count-1] =
-                  (checkSum[3] << 24) | (checkSum[2] << 16) |
-                  (checkSum[1] << 8) | (checkSum[0]);
-
-              offset += 4;
-
-
-
+              // Address Checksum
+              checkSumPtr = operationContext.message + offset;
+              operationContext.addressData[otx_index] =
+                  (checkSumPtr[3] << 24) | (checkSumPtr[2] << 16) |
+                  (checkSumPtr[1] << 8) | (checkSumPtr[0]);
 
               // End of address at this offset
-
+              offset += 4;
 
               // Base58 Encode Address
-              raw_address_length = array_length + 9;
+              raw_address_length = array_length + 10;
+              //THROW(0x6600 + raw_address_length);
 
-              //os_memset(address_pre_base64, 0, 140);
               os_memset(address_base58_encoded, 0, MAX_ADDR_OUT_LENGTH);
-              //os_memmove(address_pre_base64, operationContext.message + addres_start_index, raw_address_length );
-              base58_address_length = ada_encode_base58(addres_start_index, raw_address_length,
-                address_base58_encoded, MAX_ADDR_OUT_LENGTH);
+              base58_address_length = ada_encode_base58(
+                address_start_index,
+                raw_address_length,
+                address_base58_encoded,
+                MAX_ADDR_OUT_LENGTH);
 
 
               // Capture address UI here
+              // Attempt WITH Base58 Encoding
+              ui_address_ptr = ui_addresses[otx_index];
+              os_memset(ui_address_ptr, 0, MAX_CHAR_PER_ADDR);
+              os_memmove(ui_address_ptr, address_base58_encoded, 5);
+              os_memmove(ui_address_ptr + 5, "...", 3);
+              os_memmove(ui_address_ptr + 8,
+                         address_base58_encoded + base58_address_length - 5,
+                         5);
+              ui_addresses[otx_index][MAX_CHAR_PER_ADDR] = '\0';
               /*
               // Attempt without Base58 Encoding
-              os_memset(ui_addresses[otx_count-1], 0, MAX_CHAR_PER_ADDR);
-              os_memmove(ui_addresses[otx_count-1], addres_start_index , 5);
-              os_memmove(ui_addresses[otx_count-1] + 5, "...", 3);
-              os_memmove(ui_addresses[otx_count-1] + 8, addres_start_index + raw_address_length - 5, 5);
-              ui_addresses[otx_count-1][MAX_CHAR_PER_ADDR] = '\0';
-              */
-              // Attempt WITH Base58 Encoding
-
-              char * ui_address = ui_addresses[otx_count-1];
-
               os_memset(ui_address, 0, MAX_CHAR_PER_ADDR);
-              os_memmove(ui_address, address_base58_encoded, 5);
+              os_memmove(ui_address, address_start_index , 5);
               os_memmove(ui_address + 5, "...", 3);
-              os_memmove(ui_address + 8, address_base58_encoded + base58_address_length - 5, 5);
-              ui_addresses[otx_count-1][8] = '\0';
-
-
+              os_memmove(ui_address + 8,
+                         address_start_index + raw_address_length - 5, 5);
+              ui_addresses[otx_index][MAX_CHAR_PER_ADDR] = '\0';
+              */
 
               //offset += cbor_deserialize_int64_t(&stream, offset, &addr_checksum);
               // Skip CBOR int type
               offset++;
-              uint8_t *txAmount = operationContext.message + offset;
 
-              // Trying to work with uint64_t again
-              operationContext.txAmountData[otx_count-1] =
-                       ((uint64_t)txAmount[7]) | ((uint64_t)txAmount[6] << 8) |
-                       ((uint64_t)txAmount[5] << 16) | ((uint64_t)txAmount[4] << 24) |
-                       ((uint64_t)txAmount[3] << 32) | ((uint64_t)txAmount[2] << 40) |
-                       ((uint64_t)txAmount[1] << 48) | ((uint64_t)txAmount[0] << 56);
+              // Tx Output Amount
+              txAmount = operationContext.message + offset;
+              operationContext.txAmountData[otx_index] =
+                       ((uint64_t)txAmount[7]) |
+                       ((uint64_t)txAmount[6] << 8) |
+                       ((uint64_t)txAmount[5] << 16) |
+                       ((uint64_t)txAmount[4] << 24) |
+                       ((uint64_t)txAmount[3] << 32) |
+                       ((uint64_t)txAmount[2] << 40) |
+                       ((uint64_t)txAmount[1] << 48) |
+                       ((uint64_t)txAmount[0] << 56);
 
               offset += 8;
+
+              otx_index++;
+
           } else {
               error = true;
               THROW(0x6DDC);
           }
-          operationContext.outputTxCount = otx_count;
+
       }
   } else {
       // Invalid TX, must have at least one output
@@ -721,7 +728,7 @@ void parse_cbor_transaction() {
       THROW(0x6DDD);
   }
 
-  operationContext.finalUTXOCount = otx_count;
+  operationContext.finalUTXOCount = otx_index;
   cbor_destroy(&stream);
 
 }
