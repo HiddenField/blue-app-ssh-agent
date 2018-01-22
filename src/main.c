@@ -59,11 +59,13 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define CLA 0x80
 #define INS_GET_PUBLIC_KEY 0x02
 #define INS_HASH 0x04
-#define INS_SIGN_TX 0x06
+#define INS_SET_TX 0x05
 #define INS_SET_INDEXES 0x07
+#define INS_SIGN_TX 0x06
+#define INS_BASE58_ENCODE_TEST 0x08
 #define INS_GET_RND_PUB_KEY 0x0C
 #define INS_GET_WALLET_INDEX 0x0E
-#define INS_BASE58_ENCODE_TEST 0x08
+
 #define P1_FIRST 0x01
 #define P1_NEXT 0x02
 #define P2_CURVE25519 0x02
@@ -1443,8 +1445,8 @@ void sample_main(void) {
 
 
 
-                #ifdef INS_SIGN_TX_FUNC
-                case INS_SIGN_TX: {
+                #ifdef INS_SET_TX_FUNC
+                case INS_SET_TX: {
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
@@ -1536,7 +1538,7 @@ void sample_main(void) {
                 }
 
                 break;
-                #endif //INS_SIGN_TX_FUNC
+                #endif //INS_SET_TX_FUNC
 
 
 
@@ -1589,6 +1591,70 @@ void sample_main(void) {
                 }
                 break;
                 #endif //INS_SET_INDEXES_FUNC
+
+
+
+
+
+                #ifdef INS_SIGN_TX_FUNC
+                case INS_SIGN_TX: {
+
+                    // TODO: Check Tx and Address Signing Indexes have been set
+
+                    // Header
+                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
+                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
+                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_LC;
+                    uint32_t address_index =
+                        (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
+                        (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
+                    dataBuffer += 4;
+
+                    // Set BIP32 ADA path with address index
+                    operationContext.pathLength = ADA_ADDR_PATH_LEN;
+                    operationContext.bip32Path[0] = BIP_44 |
+                                                      HARDENED_BIP32;
+                    operationContext.bip32Path[1] = ADA_COIN_TYPE |
+                                                      HARDENED_BIP32;
+                    operationContext.bip32Path[2] = 0 |
+                                                      HARDENED_BIP32;
+                    operationContext.bip32Path[3] =
+                      signing_addresses_Indexes[address_index];
+
+                    // Derive key from indexes
+
+                    cx_ecfp_private_key_t privateKey;
+                    derive_bip32_node_private_key(privateKeyData);
+                    cx_ecfp_init_private_key(CX_CURVE_Ed25519,
+                                             privateKeyData, 32,
+                                             &privateKey);
+                    os_memset(privateKeyData, 0, sizeof(privateKeyData));
+
+                    // TODO: Check Tx and Address Signing Indexes have not exchanged
+
+                    // Sign TX
+                    uint32_t tx = 0;
+                    tx = cx_eddsa_sign(
+                        &privateKey, NULL, CX_LAST, CX_SHA512,
+                        operationContext.message,
+                        operationContext.messageLength,
+                        G_io_apdu_buffer);
+
+
+                    os_memset(&privateKey, 0, sizeof(privateKey));
+                    os_memset(&privateKeyData, 0, sizeof(privateKeyData));
+
+                    G_io_apdu_buffer[tx++] = 0x90;
+                    G_io_apdu_buffer[tx++] = 0x00;
+                    // Send back the response, do not restart the event loop
+                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+                    // Display back the original UX
+                    ui_idle();
+
+                }
+                break;
+                #endif //INS_SIGN_TX_FUNC
+
 
 
 
