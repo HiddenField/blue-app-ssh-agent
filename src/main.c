@@ -48,6 +48,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define MAX_TX_OUTPUTS 4
 #define MAX_CHAR_PER_ADDR 13
 #define MAX_ADDR_OUT_LENGTH 200
+#define MAX_SIGNING_INDEX 4
 
 #define ADA_COIN_TYPE 0x717
 #define ADA_ADDR_PATH_LEN 0x05
@@ -118,6 +119,8 @@ uint8_t base58_address_length;
 uint8_t *checkSumPtr;
 uint8_t *address_start_index;
 uint8_t *txAmount;
+uint32_t signing_addresses_Indexes[MAX_SIGNING_INDEX];
+uint32_t *current_signing_address_i;
 
 char * ui_strings[4];
 struct {
