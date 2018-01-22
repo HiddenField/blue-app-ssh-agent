@@ -108,8 +108,8 @@ typedef struct operationContext_t {
     uint64_t transactionLength;
     uint32_t transactionOffset;
     uint8_t finalUTXOCount;
-    uint32_t addressData[16];
-    uint64_t txAmountData[16];
+
+    uint64_t txAmountData[MAX_TX_OUTPUTS];
     uint8_t hashTX[32];
 } operationContext_t;
 
@@ -124,6 +124,8 @@ uint8_t *txAmount;
 uint32_t signing_addresses_Indexes[MAX_SIGNING_INDEX];
 uint32_t *current_signing_address_i;
 uint8_t privateKeyData[32];
+cx_ecfp_private_key_t privateKey;
+uint8_t *dataBuffer;
 
 char * ui_strings[4];
 struct {
@@ -133,7 +135,6 @@ struct {
     uint8_t otx_count;
 } tx_ui_t;
 
-char keyPath[200];
 operationContext_t operationContext;
 
 char ada_print_amount_tmp[32];
@@ -664,10 +665,11 @@ void parse_cbor_transaction() {
 
               // Address Checksum
               checkSumPtr = operationContext.message + offset;
+              /*
               operationContext.addressData[otx_index] =
                   (checkSumPtr[3] << 24) | (checkSumPtr[2] << 16) |
                   (checkSumPtr[1] << 8) | (checkSumPtr[0]);
-
+              */
               // End of address at this offset
               offset += 4;
 
@@ -1169,7 +1171,7 @@ void sample_main(void) {
 
                 #ifdef INS_GET_WALLET_INDEX_FUNC
                 case INS_GET_WALLET_INDEX: {
-                    uint8_t privateKeyData[32];
+                    //uint8_t privateKeyData[32];
                     uint32_t i;
 
                     operationContext.pathLength = ADA_WALLET_PATH_LEN;
@@ -1207,8 +1209,8 @@ void sample_main(void) {
                 #ifdef INS_GET_RND_PUB_KEY_FUNC
                 case INS_GET_RND_PUB_KEY: {
                     //uint8_t privateKeyData[32];
-                    cx_ecfp_private_key_t privateKey;
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA + 1;
+                    //cx_ecfp_private_key_t privateKey;
+                    dataBuffer = G_io_apdu_buffer + OFFSET_CDATA + 1;
 
                     // Ada addresses are at a fixed depth of 5. Using the
                     // input apdu length field to determine if an address index
@@ -1269,7 +1271,7 @@ void sample_main(void) {
 #endif
                     os_memset(&privateKey, 0, sizeof(privateKey));
                     os_memset(privateKeyData, 0, sizeof(privateKeyData));
-                    path_to_string(keyPath);
+
                     if (os_seph_features() &
                         SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
                         //Blue Not supported
@@ -1283,13 +1285,13 @@ void sample_main(void) {
                 break;
                 #endif //INS_GET_RND_PUB_KEY_FUNC
 
+
+
                 #ifdef INS_GET_PUBLIC_KEY_FUNC
                 case INS_GET_PUBLIC_KEY: {
                     //uint8_t privateKeyData[32];
-                    uint32_t i;
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA + 1;
-                    cx_ecfp_private_key_t privateKey;
-                    cx_curve_t curve;
+
+                    dataBuffer = G_io_apdu_buffer + OFFSET_CDATA + 1;
 
                     operationContext.pathLength =
                         G_io_apdu_buffer[OFFSET_CDATA];
@@ -1306,38 +1308,33 @@ void sample_main(void) {
                     }
 
                     // Get BIP32 address being requested
-                    for (i = 0; i < operationContext.pathLength; i++) {
+                    for (int i = 0; i < operationContext.pathLength; i++) {
                         operationContext.bip32Path[i] =
                             (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
                             (dataBuffer[2] << 8) | (dataBuffer[3]);
                         dataBuffer += 4;
                     }
 
-                    // Set Curve
-                    curve = CX_CURVE_Ed25519;
-
                     derive_bip32_node_private_key(privateKeyData);
-                    cx_ecfp_init_private_key(curve, privateKeyData, 32,
+                    cx_ecfp_init_private_key(CX_CURVE_Ed25519, privateKeyData, 32,
                                              &privateKey);
 
 #if ((CX_APILEVEL >= 5) && (CX_APILEVEL < 7))
-                    if (curve == CX_CURVE_Ed25519) {
-                        cx_ecfp_init_public_key(curve, NULL, 0,
-                                                &operationContext.publicKey);
-                        cx_eddsa_get_public_key(&privateKey,
-                                                &operationContext.publicKey);
-                    } else {
-                        cx_ecfp_generate_pair(
-                            curve, &operationContext.publicKey, &privateKey, 1);
-                    }
+
+                    cx_ecfp_init_public_key(curve, NULL, 0,
+                                            &operationContext.publicKey);
+                    cx_eddsa_get_public_key(&privateKey,
+                                            &operationContext.publicKey);
+
 #else
-                    cx_ecfp_generate_pair(curve, &operationContext.publicKey,
+                    cx_ecfp_generate_pair(CX_CURVE_Ed25519,
+                                          &operationContext.publicKey,
                                           &privateKey, 1);
 #endif
 
                     os_memset(&privateKey, 0, sizeof(privateKey));
                     os_memset(privateKeyData, 0, sizeof(privateKeyData));
-                    path_to_string(keyPath);
+
                     if (os_seph_features() &
                         SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
                         // Ledger Blue not supported
@@ -1359,7 +1356,7 @@ void sample_main(void) {
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+                    dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
                     uint32_t dataLength =
                         (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
                         (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
@@ -1451,7 +1448,7 @@ void sample_main(void) {
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+                    dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
                     uint32_t dataLength =
                         (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
                         (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
@@ -1529,12 +1526,12 @@ void sample_main(void) {
 
                     }
 
-                        G_io_apdu_buffer[tx++] = 0x90;
-                        G_io_apdu_buffer[tx++] = 0x00;
-                        // Send back the response, do not restart the event loop
-                        io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-                        // Display back the original UX
-                        ui_idle();
+                    G_io_apdu_buffer[tx++] = 0x90;
+                    G_io_apdu_buffer[tx++] = 0x00;
+                    // Send back the response, do not restart the event loop
+                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+                    // Display back the original UX
+                    ui_idle();
 
                 }
 
@@ -1553,7 +1550,7 @@ void sample_main(void) {
                     // Header
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_LC;
+                    dataBuffer = G_io_apdu_buffer + OFFSET_LC;
                     uint32_t dataLength =
                         (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
                         (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
@@ -1605,7 +1602,7 @@ void sample_main(void) {
                     // Header
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_LC;
+                    dataBuffer = G_io_apdu_buffer + OFFSET_LC;
                     uint32_t address_index =
                         (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
                         (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
@@ -1665,7 +1662,7 @@ void sample_main(void) {
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+                    dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
                     uint32_t dataLength =
                         (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
                         (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
