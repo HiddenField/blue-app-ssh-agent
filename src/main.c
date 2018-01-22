@@ -989,9 +989,9 @@ unsigned int prepare_tx_preview_ui() {
 unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
 
     uint32_t tx = 0;
-    G_io_apdu_buffer[tx++] = operationContext.finalUTXOCount;
-    G_io_apdu_buffer[tx++] = 0xFF;
-
+    //G_io_apdu_buffer[tx++] = operationContext.finalUTXOCount;
+    //G_io_apdu_buffer[tx++] = 0xFF;
+    /*
     for (int i=0; i < operationContext.finalUTXOCount; i++ ) {
         os_memmove(G_io_apdu_buffer + tx,
           &operationContext.addressData[i], 4);
@@ -1009,6 +1009,9 @@ unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
 
         G_io_apdu_buffer[tx++] = 0xFF;
     }
+    */
+    os_memmove(G_io_apdu_buffer + tx, operationContext.hashTX, 32);
+    tx += 32;
 
     G_io_apdu_buffer[tx++] = 0x90;
     G_io_apdu_buffer[tx++] = 0x00;
@@ -1475,24 +1478,48 @@ void sample_main(void) {
 
                     if(operationContext.fullMessageHash) {
                         parse_cbor_transaction();
+
+                        int error = blake2b( operationContext.hashTX,
+                                 32,
+                                 operationContext.message,
+                                 //testTX,
+                                 operationContext.transactionLength,
+                                 //20,
+                                 NULL,
+                                 0 );
+                        if(error == 0) {
+                            //THROW(0x6BAA);
+                        } else if (error == -1) {
+                            THROW(0x6BBB);
+                        } else if (error == -2) {
+                            THROW(0x6BCC);
+                        } else if (error == -3) {
+                            THROW(0x6BDD);
+                        } else if (error == -4) {
+                            THROW(0x6BEE);
+                        } else {
+                            THROW(0x6BFF);
+                        }
                     }
 
 
-
+                    uint32_t tx = 0;
                     if(operationContext.fullMessageHash) {
 
-                        UX_DISPLAY(bagl_ui_approval_preview_tx_nanos, NULL);
-                        flags |= IO_ASYNCH_REPLY;
+                        //UX_DISPLAY(bagl_ui_approval_preview_tx_nanos, NULL);
+                        //flags |= IO_ASYNCH_REPLY;
+                        os_memmove(G_io_apdu_buffer + tx, operationContext.hashTX, 32);
+                        tx += 32;
 
-                    } else {
-                        uint32_t tx = 0;
+                    }
+
                         G_io_apdu_buffer[tx++] = 0x90;
                         G_io_apdu_buffer[tx++] = 0x00;
                         // Send back the response, do not restart the event loop
                         io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
                         // Display back the original UX
                         ui_idle();
-                    }
+                    
                 }
 
                 break;
