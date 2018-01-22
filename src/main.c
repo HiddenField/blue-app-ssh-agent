@@ -123,6 +123,7 @@ uint8_t *address_start_index;
 uint8_t *txAmount;
 uint32_t signing_addresses_Indexes[MAX_SIGNING_INDEX];
 uint32_t *current_signing_address_i;
+uint8_t privateKeyData[32];
 
 char * ui_strings[4];
 struct {
@@ -852,7 +853,7 @@ unsigned short ada_print_amount(uint64_t amount, char *out,
     return strlen(out);
 }
 
-void derive_bip32_node_private_key(uint8_t *privateKeyData) {
+void derive_bip32_node_private_key(uint8_t *privateKeyDataIn) {
 
   // START Node Derivation
   #if CX_APILEVEL >= 5
@@ -860,12 +861,12 @@ void derive_bip32_node_private_key(uint8_t *privateKeyData) {
           CX_CURVE_Ed25519,
           operationContext.bip32Path,
           operationContext.pathLength,
-          privateKeyData,
+          privateKeyDataIn,
           operationContext.chainCode);
   #else
       os_perso_derive_seed_bip32(operationContext.bip32Path,
                                  operationContext.pathLength,
-                                 privateKeyData,
+                                 privateKeyDataIn,
                                  operationContext.chainCode);
   #endif
   // END Node Derivation
@@ -1205,7 +1206,7 @@ void sample_main(void) {
 
                 #ifdef INS_GET_RND_PUB_KEY_FUNC
                 case INS_GET_RND_PUB_KEY: {
-                    uint8_t privateKeyData[32];
+                    //uint8_t privateKeyData[32];
                     cx_ecfp_private_key_t privateKey;
                     uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA + 1;
 
@@ -1284,7 +1285,7 @@ void sample_main(void) {
 
                 #ifdef INS_GET_PUBLIC_KEY_FUNC
                 case INS_GET_PUBLIC_KEY: {
-                    uint8_t privateKeyData[32];
+                    //uint8_t privateKeyData[32];
                     uint32_t i;
                     uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA + 1;
                     cx_ecfp_private_key_t privateKey;
