@@ -59,6 +59,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define INS_GET_PUBLIC_KEY 0x02
 #define INS_HASH 0x04
 #define INS_SIGN_TX 0x06
+#define INS_SET_INDEXES 0x07
 #define INS_GET_RND_PUB_KEY 0x0C
 #define INS_GET_WALLET_INDEX 0x0E
 #define INS_BASE58_ENCODE_TEST 0x08
@@ -1519,12 +1520,63 @@ void sample_main(void) {
                         io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
                         // Display back the original UX
                         ui_idle();
-                    
+
                 }
 
                 break;
                 #endif //INS_SIGN_TX_FUNC
 
+
+
+
+                #ifdef INS_SET_INDEXES_FUNC
+                case INS_SET_INDEXES: {
+
+                    // TODO: Wipe previous indexes and data
+                    wipeSigningIndexes();
+
+                    // Header
+                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
+                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
+                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_LC;
+                    uint32_t dataLength =
+                        (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
+                        (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
+                    dataBuffer += 4;
+
+                    // Validation
+                    if(dataLength > MAX_SIGNING_INDEX) {
+                        THROW(0x6610);
+                    }
+
+                    // Data
+                    current_signing_address_i = signing_addresses_Indexes;
+                    // No switches here, data length declares how many indexes
+                    // there are in the data.
+                    for (int i = 0; i < dataLength; i++) {
+                        parse_uint32(current_signing_address_i, dataBuffer);
+                        dataBuffer += 4;
+                        current_signing_address_i++;
+                    }
+
+                    //TODO: Set Address Complete Switch
+
+                    // Response
+                    uint32_t tx = 0;
+                    // Echo index count
+                    os_memmove(G_io_apdu_buffer + tx, &dataLength, 4);
+                    tx += 4;
+                    // Output the transaction hash
+                    G_io_apdu_buffer[tx++] = 0x90;
+                    G_io_apdu_buffer[tx++] = 0x00;
+                    // Send back the response, do not restart the event loop
+                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+                    // Display back the original UX
+                    ui_idle();
+
+                }
+                break;
+                #endif //INS_SET_INDEXES_FUNC
 
 
 
