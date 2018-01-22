@@ -867,6 +867,15 @@ void derive_bip32_node_private_key(uint8_t *privateKeyData) {
 
 }
 
+void parse_uint32(uint32_t *value, uint8_t *data) {
+    *value = ((uint32_t)data[3]) | ((uint32_t)data[2] << 8) |
+             ((uint32_t)data[1] << 16) | ((uint32_t)data[0] << 24);
+}
+
+void wipeSigningIndexes() {
+    os_memset(signing_addresses_Indexes, 0, MAX_SIGNING_INDEX * 4);
+}
+
 unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e) {
     // Go back to the dashboard
     os_sched_exit(0);
