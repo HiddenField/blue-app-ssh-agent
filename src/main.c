@@ -51,8 +51,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define MAX_SIGNING_INDEX 4
 
 #define ADA_COIN_TYPE 0x717
-#define ADA_ADDR_PATH_LEN 0x05
-#define ADA_WALLET_PATH_LEN 0x03
+#define ADA_ADDR_BIP32_PATH_LEN 0x04
 #define BIP_44 0x2C
 #define HARDENED_BIP32 0x80000000
 
@@ -1174,7 +1173,7 @@ void sample_main(void) {
                     //uint8_t privateKeyData[32];
                     uint32_t i;
 
-                    operationContext.pathLength = ADA_WALLET_PATH_LEN;
+                    operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
 
                     operationContext.bip32Path[0] = BIP_44 | HARDENED_BIP32;
                     operationContext.bip32Path[1] = ADA_COIN_TYPE |
@@ -1228,7 +1227,7 @@ void sample_main(void) {
                         THROW(0x6B00);
                     }
 
-                    operationContext.pathLength = ADA_ADDR_PATH_LEN;
+                    operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
 
                     operationContext.bip32Path[0] = BIP_44 | HARDENED_BIP32;
                     operationContext.bip32Path[1] = ADA_COIN_TYPE |
@@ -1573,6 +1572,8 @@ void sample_main(void) {
 
                     //TODO: Set Address Complete Switch
 
+                    //TODO: Show User TX UI
+
                     // Response
                     uint32_t tx = 0;
                     // Echo index count
@@ -1599,6 +1600,8 @@ void sample_main(void) {
 
                     // TODO: Check Tx and Address Signing Indexes have been set
 
+                    // TODO: Check passed in hash equals Tx and Address Index Hash
+
                     // Header
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
@@ -1609,7 +1612,7 @@ void sample_main(void) {
                     dataBuffer += 4;
 
                     // Set BIP32 ADA path with address index
-                    operationContext.pathLength = ADA_ADDR_PATH_LEN;
+                    operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
                     operationContext.bip32Path[0] = BIP_44 |
                                                       HARDENED_BIP32;
                     operationContext.bip32Path[1] = ADA_COIN_TYPE |
@@ -1617,25 +1620,24 @@ void sample_main(void) {
                     operationContext.bip32Path[2] = 0 |
                                                       HARDENED_BIP32;
                     operationContext.bip32Path[3] =
-                      signing_addresses_Indexes[address_index];
+                      signing_addresses_Indexes[address_index] | HARDENED_BIP32;
+                      //512 | HARDENED_BIP32;
 
-                    // Derive key from indexes
-
-                    cx_ecfp_private_key_t privateKey;
                     derive_bip32_node_private_key(privateKeyData);
+
                     cx_ecfp_init_private_key(CX_CURVE_Ed25519,
                                              privateKeyData, 32,
                                              &privateKey);
-                    os_memset(privateKeyData, 0, sizeof(privateKeyData));
 
                     // TODO: Check Tx and Address Signing Indexes have not exchanged
 
                     // Sign TX
                     uint32_t tx = 0;
+
                     tx = cx_eddsa_sign(
                         &privateKey, NULL, CX_LAST, CX_SHA512,
                         operationContext.message,
-                        operationContext.messageLength,
+                        operationContext.transactionLength,
                         G_io_apdu_buffer);
 
 
