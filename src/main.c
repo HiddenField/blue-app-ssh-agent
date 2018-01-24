@@ -888,6 +888,15 @@ void wipeSigningIndexes() {
     os_memset(signing_addresses_Indexes, 0, MAX_SIGNING_INDEX * 4);
 }
 
+void resetSigningTx() {
+    os_memset(operationContext.message, 0, MAX_MSG);
+    operationContext.messageLength = 0;
+    operationContext.transactionLength = 0;
+    os_memset(operationContext.hashTX, 0, 32);
+    is_tx_set = false;
+    tx_sign_counter = 0;
+}
+
 unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e) {
     // Go back to the dashboard
     os_sched_exit(0);
@@ -1098,14 +1107,14 @@ unsigned int io_seproxyhal_touch_address_cancel(const bagl_element_t *e) {
 unsigned int ui_address_nanos_button(unsigned int button_mask,
                                      unsigned int button_mask_counter) {
     switch (button_mask) {
-    case BUTTON_EVT_RELEASED | BUTTON_LEFT: // CANCEL
-        io_seproxyhal_touch_address_cancel(NULL);
-        break;
+        case BUTTON_EVT_RELEASED | BUTTON_LEFT: // CANCEL
+            io_seproxyhal_touch_address_cancel(NULL);
+            break;
 
-    case BUTTON_EVT_RELEASED | BUTTON_RIGHT: { // OK
-        io_seproxyhal_touch_address_ok(NULL);
-        break;
-    }
+        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: { // OK
+            io_seproxyhal_touch_address_ok(NULL);
+            break;
+        }
     }
     return 0;
 }
@@ -1452,8 +1461,8 @@ void sample_main(void) {
 
                     if(is_tx_set) {
 
-                        // TODO: Reset the signing stack
-                        // resetSigningTx();
+                        resetSigningTx();
+                        // TODO: Show signing cancelled UI
                         // showCancelledUI();
 
                         THROW(0x6666);
@@ -1616,11 +1625,10 @@ void sample_main(void) {
 
                     // Check Tx and Address Signing Indexes have been set
                     if(!is_tx_set || tx_sign_counter <= 0) {
-
                         // Reset signing transaction
-                        // resetSigningTx();
+                        resetSigningTx();
+                        // Expecting Tx has been set
                         THROW(0x6666);
-
                     }
 
                     // TODO: Check passed in hash equals Tx and Address Index Hash
@@ -1654,21 +1662,19 @@ void sample_main(void) {
 
                     // TODO: Check Tx and Address Signing Indexes have not exchanged
 
-                    // Sign TX
-                    uint32_t tx = 0;
 
+                    uint32_t tx = 0;
+                    // Sign TX
                     tx = cx_eddsa_sign(
                         &privateKey, NULL, CX_LAST, CX_SHA512,
                         operationContext.message,
                         operationContext.transactionLength,
                         G_io_apdu_buffer);
 
-                    // Reduce signing counter
+                    // Reduce signing counter and check complete
                     tx_sign_counter--;
                     if(tx_sign_counter == 0 ) {
-                        // TODO: Reset signing tx
-                        // resetSigningTx();
-                        is_tx_set = false;
+                        resetSigningTx();
                     }
 
                     os_memset(&privateKey, 0, sizeof(privateKey));
