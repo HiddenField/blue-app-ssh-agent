@@ -113,7 +113,7 @@ typedef struct operationContext_t {
 } operationContext_t;
 
 
-char * ui_addresses[MAX_TX_OUTPUTS][MAX_CHAR_PER_ADDR];
+char *ui_addresses[MAX_TX_OUTPUTS][MAX_CHAR_PER_ADDR];
 char *ui_address_ptr;
 uint8_t raw_address_length;
 uint8_t base58_address_length;
@@ -125,6 +125,8 @@ uint32_t *current_signing_address_i;
 uint8_t privateKeyData[32];
 cx_ecfp_private_key_t privateKey;
 uint8_t *dataBuffer;
+bool is_tx_set;
+uint8_t tx_sign_counter;
 
 char * ui_strings[4];
 struct {
@@ -635,6 +637,8 @@ void parse_cbor_transaction() {
       error = true;
       THROW(0x6DDB);
   }
+  // Assuming this Tx needs to be signed itx_count number of times
+  tx_sign_counter = itx_count;
 
   // Scan through Output TXs
   operationContext.finalUTXOCount = 0;
@@ -737,6 +741,7 @@ void parse_cbor_transaction() {
   }
 
   operationContext.finalUTXOCount = otx_index;
+
   cbor_destroy(&stream);
 
 }
@@ -1137,7 +1142,7 @@ void sample_main(void) {
     volatile unsigned int tx = 0;
     volatile unsigned int flags = 0;
 
-
+    is_tx_set = false;
 
     // DESIGN NOTE: the bootloader ignores the way APDU are fetched. The only
     // goal is to retrieve APDU.
@@ -1445,6 +1450,15 @@ void sample_main(void) {
                 #ifdef INS_SET_TX_FUNC
                 case INS_SET_TX: {
 
+                    if(is_tx_set) {
+
+                        // TODO: Reset the signing stack
+                        // resetSigningTx();
+                        // showCancelledUI();
+
+                        THROW(0x6666);
+                    }
+
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
                     dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
@@ -1512,6 +1526,8 @@ void sample_main(void) {
                         } else {
                             THROW(0x6BFF);
                         }
+
+                        is_tx_set = true;
                     }
 
 
@@ -1598,7 +1614,14 @@ void sample_main(void) {
                 #ifdef INS_SIGN_TX_FUNC
                 case INS_SIGN_TX: {
 
-                    // TODO: Check Tx and Address Signing Indexes have been set
+                    // Check Tx and Address Signing Indexes have been set
+                    if(!is_tx_set || tx_sign_counter <= 0) {
+
+                        // Reset signing transaction
+                        // resetSigningTx();
+                        THROW(0x6666);
+
+                    }
 
                     // TODO: Check passed in hash equals Tx and Address Index Hash
 
@@ -1640,6 +1663,13 @@ void sample_main(void) {
                         operationContext.transactionLength,
                         G_io_apdu_buffer);
 
+                    // Reduce signing counter
+                    tx_sign_counter--;
+                    if(tx_sign_counter == 0 ) {
+                        // TODO: Reset signing tx
+                        // resetSigningTx();
+                        is_tx_set = false;
+                    }
 
                     os_memset(&privateKey, 0, sizeof(privateKey));
                     os_memset(&privateKeyData, 0, sizeof(privateKeyData));
