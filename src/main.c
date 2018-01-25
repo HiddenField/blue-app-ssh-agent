@@ -187,12 +187,6 @@ unsigned int ui_idle_nanos_button(unsigned int button_mask,
             io_seproxyhal_touch_exit(NULL);
 
             break;
-
-        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
-
-            io_seproxyhal_touch_show_preview(NULL);
-
-            break;
     }
     return 0;
 }
@@ -522,16 +516,6 @@ const bagl_element_t bagl_ui_signing_tx_nanos[] = {
 unsigned int
 bagl_ui_signing_tx_nanos_button(unsigned int button_mask,
                             unsigned int button_mask_counter) {
-    switch (button_mask) {
-
-        case BUTTON_EVT_RELEASED | BUTTON_LEFT: // EXIT
-
-            break;
-
-        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
-
-            break;
-    }
     return 0;
 }
 
@@ -615,8 +599,8 @@ const bagl_element_t ui_address_nanos[] = {
      NULL},
 
     {{BAGL_LABELINE, 0x01, 0, 12, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
-      BAGL_FONT_OPEN_SANS_EXTRABOLD_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Cardano ADA",
+      BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     "Provide",
      0,
      0,
      0,
@@ -625,7 +609,7 @@ const bagl_element_t ui_address_nanos[] = {
      NULL},
     {{BAGL_LABELINE, 0x02, 0, 26, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
       BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Provide public key?",
+     "Public Key?",
      0,
      0,
      0,
@@ -667,51 +651,6 @@ void ui_idle(void) {
     }
 }
 
-uint32_t path_item_to_string(char *dest, uint32_t number) {
-    uint32_t offset = 0;
-    uint32_t startOffset = 0, destOffset = 0;
-    uint8_t i;
-    uint8_t tmp[11];
-    bool hardened = ((number & 0x80000000) != 0);
-    number &= 0x7FFFFFFF;
-    uint32_t divIndex = 0x3b9aca00;
-    while (divIndex != 0) {
-        tmp[offset++] = '0' + ((number / divIndex) % 10);
-        divIndex /= 10;
-    }
-    tmp[offset] = '\0';
-    while ((tmp[startOffset] == '0') && (startOffset < offset)) {
-        startOffset++;
-    }
-    if (startOffset == offset) {
-        dest[destOffset++] = '0';
-    } else {
-        for (i = startOffset; i < offset; i++) {
-            dest[destOffset++] = tmp[i];
-        }
-    }
-    if (hardened) {
-        dest[destOffset++] = '\'';
-    }
-    dest[destOffset++] = '\0';
-    return destOffset;
-}
-
-uint32_t path_to_string(char *dest) {
-    uint8_t i;
-    uint32_t offset = 0;
-    for (i = 0; i < operationContext.pathLength; i++) {
-        uint32_t length =
-            path_item_to_string(dest + offset, operationContext.bip32Path[i]);
-        offset += length;
-        offset--;
-        if (i != operationContext.pathLength - 1) {
-            dest[offset++] = '/';
-        }
-    }
-    dest[offset++] = '\0';
-    return offset;
-}
 
 void parse_cbor_transaction() {
 
@@ -1009,6 +948,7 @@ void parse_uint32(uint32_t *value, uint8_t *data) {
 }
 
 void resetSigningTx() {
+    tx_ui_t.tx_ui_step = -1;
     os_memset(operationContext.message, 0, MAX_MSG);
     operationContext.messageLength = 0;
     operationContext.transactionLength = 0;
@@ -1023,18 +963,6 @@ unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e) {
     return 0; // do not redraw the widget
 }
 
-/* TODO: Remove
-unsigned int ui_idle_nanos_button(unsigned int button_mask,
-                                  unsigned int button_mask_counter) {
-    switch (button_mask) {
-    case BUTTON_EVT_RELEASED | BUTTON_LEFT: // EXIT
-        io_seproxyhal_touch_exit(NULL);
-        break;
-    }
-    return 0;
-}
-*/
-
 unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e) {
     UX_DISPLAY(bagl_ui_approval_preview_tx_nanos, NULL);
     return 0;
@@ -1048,14 +976,13 @@ unsigned int io_seproxyhal_touch_preview_ok(const bagl_element_t *e) {
 
     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
 
-    //snprintf(tx_ui_t.ui_label, 65, "%.*H", 32, tx_ui_t.ui_label);
-
     return 0;
 }
 
 unsigned int io_seproxyhal_touch_preview_cancel(const bagl_element_t *e) {
-    tx_ui_t.tx_ui_step = -1;
-    // TODO: Wipe TX and all data
+
+    resetSigningTx();
+
     ui_idle();
 
     return 0;
@@ -1174,7 +1101,8 @@ unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
 
 unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e) {
 
-    //TODO: Cleanup transaction data
+    //Cleanup transaction data
+    resetSigningTx();
 
     uint32_t tx = 0;
     G_io_apdu_buffer[tx++] = operationContext.finalUTXOCount;
@@ -1558,8 +1486,6 @@ void sample_main(void) {
                     uint32_t tx = 0;
                     if(operationContext.fullMessageHash) {
                         G_io_apdu_buffer[tx++] = 0x20;
-                        //os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionLength, 8);
-                        //tx += 8;
                         os_memmove(G_io_apdu_buffer + tx, operationContext.hashTX, 32);
                         tx += 32;
                     }
