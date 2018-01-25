@@ -35,6 +35,7 @@ unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e);
+unsigned int io_seproxyhal_touch_signing_completed(const bagl_element_t *e);
 
 unsigned int prepare_tx_preview_ui();
 
@@ -530,6 +531,69 @@ bagl_ui_signing_tx_nanos_button(unsigned int button_mask,
 
         case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
 
+            break;
+    }
+    return 0;
+}
+
+
+
+
+
+const bagl_element_t bagl_ui_signing_completed_nanos[] = {
+    // {
+    //     {type, userid, x, y, width, height, stroke, radius, fill, fgcolor,
+    //      bgcolor, font_id, icon_id},
+    //     text,
+    //     touch_area_brim,
+    //     overfgcolor,
+    //     overbgcolor,
+    //     tap,
+    //     out,
+    //     over,
+    // },
+    {
+        {BAGL_RECTANGLE, 0x00, 0, 0, 128, 32, 0, 0, BAGL_FILL, 0x000000,
+         0xFFFFFF, 0, 0},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_LABELINE, 0x00, 0, 20, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
+         BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        "Signing Completed",
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_ICON, 0x00, 120, 14, 8, 6, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+         BAGL_GLYPH_ICON_CHECK},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+};
+
+unsigned int
+bagl_ui_signing_completed_nanos_button(unsigned int button_mask,
+                            unsigned int button_mask_counter) {
+    switch (button_mask) {
+
+        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
+            io_seproxyhal_touch_signing_completed(NULL);
             break;
     }
     return 0;
@@ -1167,6 +1231,14 @@ unsigned int io_seproxyhal_touch_address_cancel(const bagl_element_t *e) {
     return 0; // do not redraw the widget
 }
 
+
+unsigned int io_seproxyhal_touch_signing_completed(const bagl_element_t *e) {
+    // Display back the original UX
+    ui_idle();
+
+    return 0;
+}
+
 unsigned int ui_address_nanos_button(unsigned int button_mask,
                                      unsigned int button_mask_counter) {
     switch (button_mask) {
@@ -1674,7 +1746,7 @@ void sample_main(void) {
                     // Send back the response, do not restart the event loop
                     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
                     // Display back the original UX
-                    ui_idle();
+                    //ui_idle();
 
                 }
                 break;
@@ -1735,12 +1807,6 @@ void sample_main(void) {
                         operationContext.transactionLength,
                         G_io_apdu_buffer);
 
-                    // Reduce signing counter and check complete
-                    tx_sign_counter--;
-                    if(tx_sign_counter == 0 ) {
-                        resetSigningTx();
-                    }
-
                     os_memset(&privateKey, 0, sizeof(privateKey));
                     os_memset(&privateKeyData, 0, sizeof(privateKeyData));
 
@@ -1749,7 +1815,15 @@ void sample_main(void) {
                     // Send back the response, do not restart the event loop
                     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
                     // Display back the original UX
-                    ui_idle();
+
+                    // Reduce signing counter and check complete
+                    tx_sign_counter--;
+                    if(tx_sign_counter == 0 ) {
+                        resetSigningTx();
+                        UX_DISPLAY(bagl_ui_signing_completed_nanos, NULL);
+                    }
+
+                    //ui_idle();
 
                 }
                 break;
