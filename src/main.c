@@ -1773,10 +1773,8 @@ void sample_main(void) {
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
                     dataBuffer = G_io_apdu_buffer + OFFSET_LC;
-                    uint32_t address_index =
-                        (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
-                        (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
-                    dataBuffer += 4;
+                    uint32_t address_index;
+                    parse_uint32(&address_index, dataBuffer);
 
                     // Set BIP32 ADA path with address index
                     operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
@@ -1787,7 +1785,7 @@ void sample_main(void) {
                     operationContext.bip32Path[2] = 0 |
                                                       HARDENED_BIP32;
                     operationContext.bip32Path[3] =
-                      signing_addresses_Indexes[address_index] | HARDENED_BIP32;
+                      address_index | HARDENED_BIP32;
                       //512 | HARDENED_BIP32;
 
                     derive_bip32_node_private_key(privateKeyData);
