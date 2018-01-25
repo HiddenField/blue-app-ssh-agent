@@ -49,7 +49,6 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define MAX_TX_OUTPUTS 4
 #define MAX_CHAR_PER_ADDR 13
 #define MAX_ADDR_OUT_LENGTH 200
-#define MAX_SIGNING_INDEX 4
 
 #define ADA_COIN_TYPE 0x717
 #define ADA_ADDR_BIP32_PATH_LEN 0x04
@@ -121,7 +120,6 @@ uint8_t base58_address_length;
 uint8_t *checkSumPtr;
 uint8_t *address_start_index;
 uint8_t *txAmount;
-uint32_t signing_addresses_Indexes[MAX_SIGNING_INDEX];
 uint32_t *current_signing_address_i;
 uint8_t privateKeyData[32];
 cx_ecfp_private_key_t privateKey;
@@ -158,9 +156,9 @@ const bagl_element_t ui_idle_nanos[] = {
      NULL,
      NULL},
 
-    {{BAGL_LABELINE, 0x00, 0, 12, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
+    {{BAGL_LABELINE, 0x00, 0, 20, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
       BAGL_FONT_OPEN_SANS_EXTRABOLD_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Cardano ADA",
+     "Cardano",
      0,
      0,
      0,
@@ -168,7 +166,7 @@ const bagl_element_t ui_idle_nanos[] = {
      NULL,
      NULL},
 
-    {{BAGL_ICON, 0x00, 3, 12, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+    {{BAGL_ICON, 0x00, 3, 3, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
       BAGL_GLYPH_ICON_CROSS},
      NULL,
      0,
@@ -1009,10 +1007,6 @@ void parse_uint32(uint32_t *value, uint8_t *data) {
              ((uint32_t)data[1] << 16) | ((uint32_t)data[0] << 24);
 }
 
-void wipeSigningIndexes() {
-    os_memset(signing_addresses_Indexes, 0, MAX_SIGNING_INDEX * 4);
-}
-
 void resetSigningTx() {
     os_memset(operationContext.message, 0, MAX_MSG);
     operationContext.messageLength = 0;
@@ -1445,7 +1439,7 @@ void sample_main(void) {
                         G_io_apdu_buffer[OFFSET_CDATA];
                     if ((operationContext.pathLength < 0x01) ||
                         (operationContext.pathLength > MAX_BIP32_PATH)) {
-                        screen_printf("Invalid path\n");
+
                         THROW(0x6a80);
                     }
 
@@ -1701,61 +1695,6 @@ void sample_main(void) {
 
 
 
-                #ifdef INS_SET_INDEXES_FUNC
-                case INS_SET_INDEXES: {
-
-                    // TODO: Wipe previous indexes and data
-                    wipeSigningIndexes();
-
-                    // Header
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    dataBuffer = G_io_apdu_buffer + OFFSET_LC;
-                    uint32_t dataLength =
-                        (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
-                        (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
-                    dataBuffer += 4;
-
-                    // Validation
-                    if(dataLength > MAX_SIGNING_INDEX) {
-                        THROW(0x6610);
-                    }
-
-                    // Data
-                    current_signing_address_i = signing_addresses_Indexes;
-                    // No switches here, data length declares how many indexes
-                    // there are in the data.
-                    for (int i = 0; i < dataLength; i++) {
-                        parse_uint32(current_signing_address_i, dataBuffer);
-                        dataBuffer += 4;
-                        current_signing_address_i++;
-                    }
-
-                    //TODO: Set Address Complete Switch
-
-                    //TODO: Show User TX UI
-
-                    // Response
-                    uint32_t tx = 0;
-                    // Echo index count
-                    os_memmove(G_io_apdu_buffer + tx, &dataLength, 4);
-                    tx += 4;
-                    // Output the transaction hash
-                    G_io_apdu_buffer[tx++] = 0x90;
-                    G_io_apdu_buffer[tx++] = 0x00;
-                    // Send back the response, do not restart the event loop
-                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-                    // Display back the original UX
-                    //ui_idle();
-
-                }
-                break;
-                #endif //INS_SET_INDEXES_FUNC
-
-
-
-
-
                 #ifdef INS_SIGN_TX_FUNC
                 case INS_SIGN_TX: {
 
@@ -1784,9 +1723,8 @@ void sample_main(void) {
                                                       HARDENED_BIP32;
                     operationContext.bip32Path[2] = 0 |
                                                       HARDENED_BIP32;
-                    operationContext.bip32Path[3] =
-                      address_index | HARDENED_BIP32;
-                      //512 | HARDENED_BIP32;
+                    operationContext.bip32Path[3] = address_index |
+                                                      HARDENED_BIP32;
 
                     derive_bip32_node_private_key(privateKeyData);
 
