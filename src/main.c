@@ -36,6 +36,8 @@ unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_signing_completed(const bagl_element_t *e);
+unsigned int io_seproxyhal_touch_signing_aborted(const bagl_element_t *e);
+
 
 unsigned int prepare_tx_preview_ui();
 
@@ -577,6 +579,68 @@ bagl_ui_signing_completed_nanos_button(unsigned int button_mask,
 
         case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
             io_seproxyhal_touch_signing_completed(NULL);
+            break;
+    }
+    return 0;
+}
+
+
+
+
+const bagl_element_t bagl_ui_signing_aborted_nanos[] = {
+    // {
+    //     {type, userid, x, y, width, height, stroke, radius, fill, fgcolor,
+    //      bgcolor, font_id, icon_id},
+    //     text,
+    //     touch_area_brim,
+    //     overfgcolor,
+    //     overbgcolor,
+    //     tap,
+    //     out,
+    //     over,
+    // },
+    {
+        {BAGL_RECTANGLE, 0x00, 0, 0, 128, 32, 0, 0, BAGL_FILL, 0x000000,
+         0xFFFFFF, 0, 0},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_LABELINE, 0x00, 0, 20, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
+         BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        "Signing Aborted",
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_ICON, 0x00, 120, 14, 8, 6, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+         BAGL_GLYPH_ICON_CHECK},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+};
+
+unsigned int
+bagl_ui_signing_aborted_nanos_button(unsigned int button_mask,
+                            unsigned int button_mask_counter) {
+    switch (button_mask) {
+
+        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
+            io_seproxyhal_touch_signing_aborted(NULL);
             break;
     }
     return 0;
@@ -1158,6 +1222,19 @@ unsigned int io_seproxyhal_touch_signing_completed(const bagl_element_t *e) {
     return 0;
 }
 
+unsigned int io_seproxyhal_touch_signing_aborted(const bagl_element_t *e) {
+
+    uint8_t tx = 0;
+    G_io_apdu_buffer[tx++] = 0x66;
+    G_io_apdu_buffer[tx++] = 0x66;
+    // Send back the response, do not restart the event loop
+    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 2);
+    // Display back the original UX
+    ui_idle();
+    return 0; // do not redraw the widget
+
+}
+
 unsigned int ui_address_nanos_button(unsigned int button_mask,
                                      unsigned int button_mask_counter) {
     switch (button_mask) {
@@ -1516,8 +1593,11 @@ void sample_main(void) {
                         resetSigningTx();
                         // TODO: Show signing cancelled UI
                         // showCancelledUI();
+                        UX_DISPLAY(bagl_ui_signing_aborted_nanos, NULL);
+                        flags |= IO_ASYNCH_REPLY;
 
-                        THROW(0x6666);
+                        break;
+
                     }
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
@@ -1601,13 +1681,13 @@ void sample_main(void) {
                         //tx += 32;
 
                     } else {
-                      uint32_t tx = 0;
-                    G_io_apdu_buffer[tx++] = 0x90;
-                    G_io_apdu_buffer[tx++] = 0x00;
-                    // Send back the response, do not restart the event loop
-                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-                    // Display back the original UX
-                    ui_idle();
+                        uint32_t tx = 0;
+                        G_io_apdu_buffer[tx++] = 0x90;
+                        G_io_apdu_buffer[tx++] = 0x00;
+                        // Send back the response, do not restart the event loop
+                        io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+                        // Display back the original UX
+                        ui_idle();
                     }
 
                 }
