@@ -128,7 +128,12 @@ uint8_t *dataBuffer;
 bool is_tx_set;
 uint8_t tx_sign_counter;
 
-char * ui_strings[4];
+const char * ui_strings[] = {"Send ADA",
+                              "To Address",
+                              "TX Fee ADA",
+                              "Signing",
+                              "Completed"};
+
 struct {
     char ui_label[32];
     char ui_value[32];
@@ -185,12 +190,6 @@ unsigned int ui_idle_nanos_button(unsigned int button_mask,
 
             // TODO: Wipe TX and all data
             io_seproxyhal_touch_exit(NULL);
-
-            break;
-
-        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
-
-            io_seproxyhal_touch_show_preview(NULL);
 
             break;
     }
@@ -471,6 +470,59 @@ bagl_ui_approval_preview_tx_nanos_button(unsigned int button_mask,
 }
 
 
+
+
+const bagl_element_t bagl_ui_signing_tx_nanos[] = {
+    // {
+    //     {type, userid, x, y, width, height, stroke, radius, fill, fgcolor,
+    //      bgcolor, font_id, icon_id},
+    //     text,
+    //     touch_area_brim,
+    //     overfgcolor,
+    //     overbgcolor,
+    //     tap,
+    //     out,
+    //     over,
+    // },
+    {
+        {BAGL_RECTANGLE, 0x00, 0, 0, 128, 32, 0, 0, BAGL_FILL, 0x000000,
+         0xFFFFFF, 0, 0},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_LABELINE, 0x00, 0, 12, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
+         BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        "Signing",
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+};
+
+unsigned int
+bagl_ui_signing_tx_nanos_button(unsigned int button_mask,
+                            unsigned int button_mask_counter) {
+    switch (button_mask) {
+
+        case BUTTON_EVT_RELEASED | BUTTON_LEFT: // EXIT
+
+            break;
+
+        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
+
+            break;
+    }
+    return 0;
+}
 
 
 
@@ -977,10 +1029,6 @@ unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e) {
 
 unsigned int prepare_tx_preview_ui() {
 
-    ui_strings[0] = "Send ADA";
-    ui_strings[1] = "To Address";
-    ui_strings[2] = "TX Fee ADA";
-
     uint64_t fee = 0x00000000;
 
     os_memset(tx_ui_t.ui_label, 0, 32);
@@ -1048,8 +1096,9 @@ unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
     G_io_apdu_buffer[tx++] = 0x00;
     // Send back the response, do not restart the event loop
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-    // Display back the original UX
-    ui_idle();
+    // Display Signing UI
+    UX_DISPLAY(bagl_ui_signing_tx_nanos, NULL);
+    //ui_idle();
 
     return 0;
 }
@@ -1543,10 +1592,12 @@ void sample_main(void) {
                     uint32_t tx = 0;
                     if(operationContext.fullMessageHash) {
 
-                        //UX_DISPLAY(bagl_ui_approval_preview_tx_nanos, NULL);
-                        //flags |= IO_ASYNCH_REPLY;
-                        os_memmove(G_io_apdu_buffer + tx, operationContext.hashTX, 32);
-                        tx += 32;
+                        UX_DISPLAY(bagl_ui_approval_preview_tx_nanos, NULL);
+                        flags |= IO_ASYNCH_REPLY;
+
+                        // TODO: Implement UI switch here to allow for headless signing
+                        //os_memmove(G_io_apdu_buffer + tx, operationContext.hashTX, 32);
+                        //tx += 32;
 
                     }
 
