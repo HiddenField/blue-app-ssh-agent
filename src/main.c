@@ -127,7 +127,8 @@ uint8_t *dataBuffer;
 bool is_tx_set;
 uint8_t tx_sign_counter;
 
-char * ui_strings[4];
+const char * const ui_strings[3] = {"Send ADA", "To Address", "TX Fee ADA" };
+
 struct {
     char ui_label[32];
     char ui_value[32];
@@ -1095,10 +1096,6 @@ unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e) {
 }
 
 unsigned int prepare_tx_preview_ui() {
-
-    ui_strings[0] = "Send ADA";
-    ui_strings[1] = "To Address";
-    ui_strings[2] = "TX Fee ADA";
 
     uint64_t fee = 0x00000000;
 
