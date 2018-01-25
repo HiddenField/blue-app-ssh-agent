@@ -1021,6 +1021,18 @@ void resetSigningTx() {
     tx_sign_counter = 0;
 }
 
+unsigned int abortSigningTxUI() {
+    if(is_tx_set) {
+        resetSigningTx();
+
+        UX_DISPLAY(bagl_ui_signing_aborted_nanos, NULL);
+
+        return 1;
+    }
+
+    return 0;
+}
+
 unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e) {
     // Go back to the dashboard
     os_sched_exit(0);
@@ -1311,6 +1323,13 @@ void sample_main(void) {
                     THROW(0x6E00);
                 }
 
+                if (G_io_apdu_buffer[1] != INS_SIGN_TX &&
+                    abortSigningTxUI()) {
+                        flags |= IO_ASYNCH_REPLY;
+                        THROW(0x6666);
+                }
+
+
                 switch (G_io_apdu_buffer[1]) {
 
                 #ifdef INS_GET_WALLET_INDEX_FUNC
@@ -1587,18 +1606,6 @@ void sample_main(void) {
 
                 #ifdef INS_SET_TX_FUNC
                 case INS_SET_TX: {
-
-                    if(is_tx_set) {
-
-                        resetSigningTx();
-                        // TODO: Show signing cancelled UI
-                        // showCancelledUI();
-                        UX_DISPLAY(bagl_ui_signing_aborted_nanos, NULL);
-                        flags |= IO_ASYNCH_REPLY;
-
-                        break;
-
-                    }
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
