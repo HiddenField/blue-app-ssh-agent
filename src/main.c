@@ -35,6 +35,9 @@ unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e);
+unsigned int io_seproxyhal_touch_signing_completed(const bagl_element_t *e);
+unsigned int io_seproxyhal_touch_signing_aborted(const bagl_element_t *e);
+
 
 unsigned int prepare_tx_preview_ui();
 
@@ -48,11 +51,9 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define MAX_TX_OUTPUTS 4
 #define MAX_CHAR_PER_ADDR 13
 #define MAX_ADDR_OUT_LENGTH 200
-#define MAX_SIGNING_INDEX 4
 
 #define ADA_COIN_TYPE 0x717
-#define ADA_ADDR_PATH_LEN 0x05
-#define ADA_WALLET_PATH_LEN 0x03
+#define ADA_ADDR_BIP32_PATH_LEN 0x04
 #define BIP_44 0x2C
 #define HARDENED_BIP32 0x80000000
 
@@ -114,20 +115,22 @@ typedef struct operationContext_t {
 } operationContext_t;
 
 
-char * ui_addresses[MAX_TX_OUTPUTS][MAX_CHAR_PER_ADDR];
+char *ui_addresses[MAX_TX_OUTPUTS][MAX_CHAR_PER_ADDR];
 char *ui_address_ptr;
 uint8_t raw_address_length;
 uint8_t base58_address_length;
 uint8_t *checkSumPtr;
 uint8_t *address_start_index;
 uint8_t *txAmount;
-uint32_t signing_addresses_Indexes[MAX_SIGNING_INDEX];
 uint32_t *current_signing_address_i;
 uint8_t privateKeyData[32];
 cx_ecfp_private_key_t privateKey;
 uint8_t *dataBuffer;
+bool is_tx_set;
+uint8_t tx_sign_counter;
 
-char * ui_strings[4];
+const char * const ui_strings[3] = {"Send ADA", "To Address", "TX Fee ADA" };
+
 struct {
     char ui_label[32];
     char ui_value[32];
@@ -156,9 +159,9 @@ const bagl_element_t ui_idle_nanos[] = {
      NULL,
      NULL},
 
-    {{BAGL_LABELINE, 0x00, 0, 12, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
+    {{BAGL_LABELINE, 0x00, 0, 20, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
       BAGL_FONT_OPEN_SANS_EXTRABOLD_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Cardano ADA",
+     "Cardano",
      0,
      0,
      0,
@@ -166,7 +169,7 @@ const bagl_element_t ui_idle_nanos[] = {
      NULL,
      NULL},
 
-    {{BAGL_ICON, 0x00, 3, 12, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+    {{BAGL_ICON, 0x00, 3, 3, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
       BAGL_GLYPH_ICON_CROSS},
      NULL,
      0,
@@ -184,12 +187,6 @@ unsigned int ui_idle_nanos_button(unsigned int button_mask,
 
             // TODO: Wipe TX and all data
             io_seproxyhal_touch_exit(NULL);
-
-            break;
-
-        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
-
-            io_seproxyhal_touch_show_preview(NULL);
 
             break;
     }
@@ -471,7 +468,183 @@ bagl_ui_approval_preview_tx_nanos_button(unsigned int button_mask,
 
 
 
+const bagl_element_t bagl_ui_signing_tx_nanos[] = {
+    // {
+    //     {type, userid, x, y, width, height, stroke, radius, fill, fgcolor,
+    //      bgcolor, font_id, icon_id},
+    //     text,
+    //     touch_area_brim,
+    //     overfgcolor,
+    //     overbgcolor,
+    //     tap,
+    //     out,
+    //     over,
+    // },
+    {
+        {BAGL_RECTANGLE, 0x00, 0, 0, 128, 32, 0, 0, BAGL_FILL, 0x000000,
+         0xFFFFFF, 0, 0},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_LABELINE, 0x00, 0, 20, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
+         BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        "Signing...",
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_ICON, 0x00, 24, 14, 7, 7, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+         BAGL_GLYPH_ICON_LOADING_BADGE},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+};
 
+unsigned int
+bagl_ui_signing_tx_nanos_button(unsigned int button_mask,
+                            unsigned int button_mask_counter) {
+    return 0;
+}
+
+
+
+
+
+const bagl_element_t bagl_ui_signing_completed_nanos[] = {
+    // {
+    //     {type, userid, x, y, width, height, stroke, radius, fill, fgcolor,
+    //      bgcolor, font_id, icon_id},
+    //     text,
+    //     touch_area_brim,
+    //     overfgcolor,
+    //     overbgcolor,
+    //     tap,
+    //     out,
+    //     over,
+    // },
+    {
+        {BAGL_RECTANGLE, 0x00, 0, 0, 128, 32, 0, 0, BAGL_FILL, 0x000000,
+         0xFFFFFF, 0, 0},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_LABELINE, 0x00, 0, 20, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
+         BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        "Signing Completed",
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_ICON, 0x00, 120, 14, 8, 6, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+         BAGL_GLYPH_ICON_CHECK},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+};
+
+unsigned int
+bagl_ui_signing_completed_nanos_button(unsigned int button_mask,
+                            unsigned int button_mask_counter) {
+    switch (button_mask) {
+
+        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
+            io_seproxyhal_touch_signing_completed(NULL);
+            break;
+    }
+    return 0;
+}
+
+
+
+
+const bagl_element_t bagl_ui_signing_aborted_nanos[] = {
+    // {
+    //     {type, userid, x, y, width, height, stroke, radius, fill, fgcolor,
+    //      bgcolor, font_id, icon_id},
+    //     text,
+    //     touch_area_brim,
+    //     overfgcolor,
+    //     overbgcolor,
+    //     tap,
+    //     out,
+    //     over,
+    // },
+    {
+        {BAGL_RECTANGLE, 0x00, 0, 0, 128, 32, 0, 0, BAGL_FILL, 0x000000,
+         0xFFFFFF, 0, 0},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_LABELINE, 0x00, 0, 20, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
+         BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        "Signing Aborted",
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+    {
+        {BAGL_ICON, 0x00, 120, 14, 8, 6, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
+         BAGL_GLYPH_ICON_CHECK},
+        NULL,
+        0,
+        0,
+        0,
+        NULL,
+        NULL,
+        NULL,
+    },
+};
+
+unsigned int
+bagl_ui_signing_aborted_nanos_button(unsigned int button_mask,
+                            unsigned int button_mask_counter) {
+    switch (button_mask) {
+
+        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: // APPORVE
+            io_seproxyhal_touch_signing_aborted(NULL);
+            break;
+    }
+    return 0;
+}
 
 
 
@@ -490,8 +663,8 @@ const bagl_element_t ui_address_nanos[] = {
      NULL},
 
     {{BAGL_LABELINE, 0x01, 0, 12, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
-      BAGL_FONT_OPEN_SANS_EXTRABOLD_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Cardano ADA",
+      BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     "Provide",
      0,
      0,
      0,
@@ -500,7 +673,7 @@ const bagl_element_t ui_address_nanos[] = {
      NULL},
     {{BAGL_LABELINE, 0x02, 0, 26, 128, 32, 0, 0, 0, 0xFFFFFF, 0x000000,
       BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Provide public key?",
+     "Public Key?",
      0,
      0,
      0,
@@ -542,51 +715,6 @@ void ui_idle(void) {
     }
 }
 
-uint32_t path_item_to_string(char *dest, uint32_t number) {
-    uint32_t offset = 0;
-    uint32_t startOffset = 0, destOffset = 0;
-    uint8_t i;
-    uint8_t tmp[11];
-    bool hardened = ((number & 0x80000000) != 0);
-    number &= 0x7FFFFFFF;
-    uint32_t divIndex = 0x3b9aca00;
-    while (divIndex != 0) {
-        tmp[offset++] = '0' + ((number / divIndex) % 10);
-        divIndex /= 10;
-    }
-    tmp[offset] = '\0';
-    while ((tmp[startOffset] == '0') && (startOffset < offset)) {
-        startOffset++;
-    }
-    if (startOffset == offset) {
-        dest[destOffset++] = '0';
-    } else {
-        for (i = startOffset; i < offset; i++) {
-            dest[destOffset++] = tmp[i];
-        }
-    }
-    if (hardened) {
-        dest[destOffset++] = '\'';
-    }
-    dest[destOffset++] = '\0';
-    return destOffset;
-}
-
-uint32_t path_to_string(char *dest) {
-    uint8_t i;
-    uint32_t offset = 0;
-    for (i = 0; i < operationContext.pathLength; i++) {
-        uint32_t length =
-            path_item_to_string(dest + offset, operationContext.bip32Path[i]);
-        offset += length;
-        offset--;
-        if (i != operationContext.pathLength - 1) {
-            dest[offset++] = '/';
-        }
-    }
-    dest[offset++] = '\0';
-    return offset;
-}
 
 void parse_cbor_transaction() {
 
@@ -636,6 +764,8 @@ void parse_cbor_transaction() {
       error = true;
       THROW(0x6DDB);
   }
+  // Assuming this Tx needs to be signed itx_count number of times
+  tx_sign_counter = itx_count;
 
   // Scan through Output TXs
   operationContext.finalUTXOCount = 0;
@@ -738,6 +868,7 @@ void parse_cbor_transaction() {
   }
 
   operationContext.finalUTXOCount = otx_index;
+
   cbor_destroy(&stream);
 
 }
@@ -880,8 +1011,26 @@ void parse_uint32(uint32_t *value, uint8_t *data) {
              ((uint32_t)data[1] << 16) | ((uint32_t)data[0] << 24);
 }
 
-void wipeSigningIndexes() {
-    os_memset(signing_addresses_Indexes, 0, MAX_SIGNING_INDEX * 4);
+void resetSigningTx() {
+    tx_ui_t.tx_ui_step = -1;
+    os_memset(operationContext.message, 0, MAX_MSG);
+    operationContext.messageLength = 0;
+    operationContext.transactionLength = 0;
+    os_memset(operationContext.hashTX, 0, 32);
+    is_tx_set = false;
+    tx_sign_counter = 0;
+}
+
+unsigned int abortSigningTxUI() {
+    if(is_tx_set) {
+        resetSigningTx();
+
+        UX_DISPLAY(bagl_ui_signing_aborted_nanos, NULL);
+
+        return 1;
+    }
+
+    return 0;
 }
 
 unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e) {
@@ -889,18 +1038,6 @@ unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e) {
     os_sched_exit(0);
     return 0; // do not redraw the widget
 }
-
-/* TODO: Remove
-unsigned int ui_idle_nanos_button(unsigned int button_mask,
-                                  unsigned int button_mask_counter) {
-    switch (button_mask) {
-    case BUTTON_EVT_RELEASED | BUTTON_LEFT: // EXIT
-        io_seproxyhal_touch_exit(NULL);
-        break;
-    }
-    return 0;
-}
-*/
 
 unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e) {
     UX_DISPLAY(bagl_ui_approval_preview_tx_nanos, NULL);
@@ -915,14 +1052,13 @@ unsigned int io_seproxyhal_touch_preview_ok(const bagl_element_t *e) {
 
     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
 
-    //snprintf(tx_ui_t.ui_label, 65, "%.*H", 32, tx_ui_t.ui_label);
-
     return 0;
 }
 
 unsigned int io_seproxyhal_touch_preview_cancel(const bagl_element_t *e) {
-    tx_ui_t.tx_ui_step = -1;
-    // TODO: Wipe TX and all data
+
+    resetSigningTx();
+
     ui_idle();
 
     return 0;
@@ -963,10 +1099,6 @@ unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e) {
 }
 
 unsigned int prepare_tx_preview_ui() {
-
-    ui_strings[0] = "Send ADA";
-    ui_strings[1] = "To Address";
-    ui_strings[2] = "TX Fee ADA";
 
     uint64_t fee = 0x00000000;
 
@@ -1036,14 +1168,17 @@ unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
     // Send back the response, do not restart the event loop
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
     // Display back the original UX
-    ui_idle();
+
+    UX_DISPLAY(bagl_ui_signing_tx_nanos, NULL);
+    //ui_idle();
 
     return 0;
 }
 
 unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e) {
 
-    //TODO: Cleanup transaction data
+    //Cleanup transaction data
+    resetSigningTx();
 
     uint32_t tx = 0;
     G_io_apdu_buffer[tx++] = operationContext.finalUTXOCount;
@@ -1091,17 +1226,38 @@ unsigned int io_seproxyhal_touch_address_cancel(const bagl_element_t *e) {
     return 0; // do not redraw the widget
 }
 
+
+unsigned int io_seproxyhal_touch_signing_completed(const bagl_element_t *e) {
+    // Display back the original UX
+    ui_idle();
+
+    return 0;
+}
+
+unsigned int io_seproxyhal_touch_signing_aborted(const bagl_element_t *e) {
+
+    uint8_t tx = 0;
+    G_io_apdu_buffer[tx++] = 0x66;
+    G_io_apdu_buffer[tx++] = 0x66;
+    // Send back the response, do not restart the event loop
+    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 2);
+    // Display back the original UX
+    ui_idle();
+    return 0; // do not redraw the widget
+
+}
+
 unsigned int ui_address_nanos_button(unsigned int button_mask,
                                      unsigned int button_mask_counter) {
     switch (button_mask) {
-    case BUTTON_EVT_RELEASED | BUTTON_LEFT: // CANCEL
-        io_seproxyhal_touch_address_cancel(NULL);
-        break;
+        case BUTTON_EVT_RELEASED | BUTTON_LEFT: // CANCEL
+            io_seproxyhal_touch_address_cancel(NULL);
+            break;
 
-    case BUTTON_EVT_RELEASED | BUTTON_RIGHT: { // OK
-        io_seproxyhal_touch_address_ok(NULL);
-        break;
-    }
+        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: { // OK
+            io_seproxyhal_touch_address_ok(NULL);
+            break;
+        }
     }
     return 0;
 }
@@ -1138,7 +1294,7 @@ void sample_main(void) {
     volatile unsigned int tx = 0;
     volatile unsigned int flags = 0;
 
-
+    is_tx_set = false;
 
     // DESIGN NOTE: the bootloader ignores the way APDU are fetched. The only
     // goal is to retrieve APDU.
@@ -1167,6 +1323,13 @@ void sample_main(void) {
                     THROW(0x6E00);
                 }
 
+                if (G_io_apdu_buffer[1] != INS_SIGN_TX &&
+                    abortSigningTxUI()) {
+                        flags |= IO_ASYNCH_REPLY;
+                        THROW(0x6666);
+                }
+
+
                 switch (G_io_apdu_buffer[1]) {
 
                 #ifdef INS_GET_WALLET_INDEX_FUNC
@@ -1174,7 +1337,7 @@ void sample_main(void) {
                     //uint8_t privateKeyData[32];
                     uint32_t i;
 
-                    operationContext.pathLength = ADA_WALLET_PATH_LEN;
+                    operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
 
                     operationContext.bip32Path[0] = BIP_44 | HARDENED_BIP32;
                     operationContext.bip32Path[1] = ADA_COIN_TYPE |
@@ -1228,7 +1391,7 @@ void sample_main(void) {
                         THROW(0x6B00);
                     }
 
-                    operationContext.pathLength = ADA_ADDR_PATH_LEN;
+                    operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
 
                     operationContext.bip32Path[0] = BIP_44 | HARDENED_BIP32;
                     operationContext.bip32Path[1] = ADA_COIN_TYPE |
@@ -1297,7 +1460,7 @@ void sample_main(void) {
                         G_io_apdu_buffer[OFFSET_CDATA];
                     if ((operationContext.pathLength < 0x01) ||
                         (operationContext.pathLength > MAX_BIP32_PATH)) {
-                        screen_printf("Invalid path\n");
+
                         THROW(0x6a80);
                     }
 
@@ -1419,8 +1582,6 @@ void sample_main(void) {
                     uint32_t tx = 0;
                     if(operationContext.fullMessageHash) {
                         G_io_apdu_buffer[tx++] = 0x20;
-                        //os_memmove(G_io_apdu_buffer + tx, &operationContext.transactionLength, 8);
-                        //tx += 8;
                         os_memmove(G_io_apdu_buffer + tx, operationContext.hashTX, 32);
                         tx += 32;
                     }
@@ -1513,25 +1674,28 @@ void sample_main(void) {
                         } else {
                             THROW(0x6BFF);
                         }
+
+                        is_tx_set = true;
                     }
 
 
-                    uint32_t tx = 0;
+
                     if(operationContext.fullMessageHash) {
 
-                        //UX_DISPLAY(bagl_ui_approval_preview_tx_nanos, NULL);
-                        //flags |= IO_ASYNCH_REPLY;
-                        os_memmove(G_io_apdu_buffer + tx, operationContext.hashTX, 32);
-                        tx += 32;
+                        UX_DISPLAY(bagl_ui_approval_preview_tx_nanos, NULL);
+                        flags |= IO_ASYNCH_REPLY;
+                        //os_memmove(G_io_apdu_buffer + tx, operationContext.hashTX, 32);
+                        //tx += 32;
 
+                    } else {
+                        uint32_t tx = 0;
+                        G_io_apdu_buffer[tx++] = 0x90;
+                        G_io_apdu_buffer[tx++] = 0x00;
+                        // Send back the response, do not restart the event loop
+                        io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+                        // Display back the original UX
+                        ui_idle();
                     }
-
-                    G_io_apdu_buffer[tx++] = 0x90;
-                    G_io_apdu_buffer[tx++] = 0x00;
-                    // Send back the response, do not restart the event loop
-                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-                    // Display back the original UX
-                    ui_idle();
 
                 }
 
@@ -1541,103 +1705,53 @@ void sample_main(void) {
 
 
 
-                #ifdef INS_SET_INDEXES_FUNC
-                case INS_SET_INDEXES: {
-
-                    // TODO: Wipe previous indexes and data
-                    wipeSigningIndexes();
-
-                    // Header
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    dataBuffer = G_io_apdu_buffer + OFFSET_LC;
-                    uint32_t dataLength =
-                        (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
-                        (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
-                    dataBuffer += 4;
-
-                    // Validation
-                    if(dataLength > MAX_SIGNING_INDEX) {
-                        THROW(0x6610);
-                    }
-
-                    // Data
-                    current_signing_address_i = signing_addresses_Indexes;
-                    // No switches here, data length declares how many indexes
-                    // there are in the data.
-                    for (int i = 0; i < dataLength; i++) {
-                        parse_uint32(current_signing_address_i, dataBuffer);
-                        dataBuffer += 4;
-                        current_signing_address_i++;
-                    }
-
-                    //TODO: Set Address Complete Switch
-
-                    // Response
-                    uint32_t tx = 0;
-                    // Echo index count
-                    os_memmove(G_io_apdu_buffer + tx, &dataLength, 4);
-                    tx += 4;
-                    // Output the transaction hash
-                    G_io_apdu_buffer[tx++] = 0x90;
-                    G_io_apdu_buffer[tx++] = 0x00;
-                    // Send back the response, do not restart the event loop
-                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-                    // Display back the original UX
-                    ui_idle();
-
-                }
-                break;
-                #endif //INS_SET_INDEXES_FUNC
-
-
-
-
-
                 #ifdef INS_SIGN_TX_FUNC
                 case INS_SIGN_TX: {
 
-                    // TODO: Check Tx and Address Signing Indexes have been set
+                    // Check Tx and Address Signing Indexes have been set
+                    if(!is_tx_set || tx_sign_counter <= 0) {
+                        // Reset signing transaction
+                        resetSigningTx();
+                        // Expecting Tx has been set
+                        THROW(0x6666);
+                    }
+
+                    // TODO: Check passed in hash equals Tx and Address Index Hash
 
                     // Header
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
                     dataBuffer = G_io_apdu_buffer + OFFSET_LC;
-                    uint32_t address_index =
-                        (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
-                        (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
-                    dataBuffer += 4;
+                    uint32_t address_index;
+                    parse_uint32(&address_index, dataBuffer);
 
                     // Set BIP32 ADA path with address index
-                    operationContext.pathLength = ADA_ADDR_PATH_LEN;
+                    operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
                     operationContext.bip32Path[0] = BIP_44 |
                                                       HARDENED_BIP32;
                     operationContext.bip32Path[1] = ADA_COIN_TYPE |
                                                       HARDENED_BIP32;
                     operationContext.bip32Path[2] = 0 |
                                                       HARDENED_BIP32;
-                    operationContext.bip32Path[3] =
-                      signing_addresses_Indexes[address_index];
+                    operationContext.bip32Path[3] = address_index |
+                                                      HARDENED_BIP32;
 
-                    // Derive key from indexes
-
-                    cx_ecfp_private_key_t privateKey;
                     derive_bip32_node_private_key(privateKeyData);
+
                     cx_ecfp_init_private_key(CX_CURVE_Ed25519,
                                              privateKeyData, 32,
                                              &privateKey);
-                    os_memset(privateKeyData, 0, sizeof(privateKeyData));
 
                     // TODO: Check Tx and Address Signing Indexes have not exchanged
 
-                    // Sign TX
+
                     uint32_t tx = 0;
+                    // Sign TX
                     tx = cx_eddsa_sign(
                         &privateKey, NULL, CX_LAST, CX_SHA512,
                         operationContext.message,
-                        operationContext.messageLength,
+                        operationContext.transactionLength,
                         G_io_apdu_buffer);
-
 
                     os_memset(&privateKey, 0, sizeof(privateKey));
                     os_memset(&privateKeyData, 0, sizeof(privateKeyData));
@@ -1647,7 +1761,15 @@ void sample_main(void) {
                     // Send back the response, do not restart the event loop
                     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
                     // Display back the original UX
-                    ui_idle();
+
+                    // Reduce signing counter and check complete
+                    tx_sign_counter--;
+                    if(tx_sign_counter == 0 ) {
+                        resetSigningTx();
+                        UX_DISPLAY(bagl_ui_signing_completed_nanos, NULL);
+                    }
+
+                    //ui_idle();
 
                 }
                 break;
