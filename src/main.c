@@ -1860,6 +1860,11 @@ void sample_main(void) {
 
                   if(operationContext.fullMessageHash) {
 
+                      // Output total Tx inputs
+                      G_io_apdu_buffer[tx++] = tx_sign_counter;
+                      // Output total Tx outputs
+                      G_io_apdu_buffer[tx++] = operationContext.finalUTXOCount;
+
                       for (int i=0; i < operationContext.finalUTXOCount; i++ ) {
 
                           os_memmove(G_io_apdu_buffer + tx,
