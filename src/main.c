@@ -117,9 +117,12 @@ typedef struct operationContext_t {
     uint64_t transactionLength;
     uint32_t transactionOffset;
     uint8_t finalUTXOCount;
-
     uint64_t txAmountData[MAX_TX_OUTPUTS];
     uint8_t hashTX[32];
+
+    #ifdef INS_CBOR_DECODE_TEST_FUNC
+    uint32_t addressData[16];
+    #endif
 } operationContext_t;
 
 
@@ -127,7 +130,9 @@ char *ui_addresses[MAX_TX_OUTPUTS][MAX_CHAR_PER_ADDR];
 char *ui_address_ptr;
 uint8_t raw_address_length;
 uint8_t base58_address_length;
+#ifdef INS_CBOR_DECODE_TEST_FUNC
 uint8_t *checkSumPtr;
+#endif
 uint8_t *address_start_index;
 uint8_t *txAmount;
 uint32_t *current_signing_address_i;
