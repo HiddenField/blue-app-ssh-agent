@@ -1810,6 +1810,72 @@ void sample_main(void) {
 
                 #ifdef INS_CBOR_DECODE_TEST_FUNC
                 case INS_CBOR_DECODE_TEST: {
+
+                  uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
+                  uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
+                  dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+                  uint32_t dataLength =
+                      (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
+                      (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
+                  dataBuffer += 4;
+
+                  // First APDU -
+                  if (p1 == P1_FIRST) {
+                      // First APDU contains total transaction length
+                      operationContext.transactionLength = dataLength;
+
+                      if(p2 == P2_MULTI_TX) {
+                          dataLength = MAX_CHUNK_SIZE;
+                      } else if (p2 != P2_SINGLE_TX) {
+                          THROW(0x6B02);
+                      }
+                      operationContext.transactionOffset = 0;
+                      operationContext.fullMessageHash = false;
+                  } else if (p1 != P1_NEXT) {
+                      THROW(0x6B00);
+                  }
+
+                  os_memmove(operationContext.message +
+                              operationContext.transactionOffset,
+                             dataBuffer, dataLength);
+
+                  operationContext.transactionOffset += dataLength;
+
+                  if(operationContext.transactionOffset ==
+                    operationContext.transactionLength
+                  ) {
+                      operationContext.fullMessageHash = true;
+                  }
+
+                  if(operationContext.fullMessageHash) {
+                      parse_cbor_transaction();
+                  }
+
+                  uint32_t tx = 0;
+
+                  if(operationContext.fullMessageHash) {
+
+                      for (int i=0; i < operationContext.finalUTXOCount; i++ ) {
+
+                          os_memmove(G_io_apdu_buffer + tx,
+                            &operationContext.addressData[i], 4);
+                          tx += 4;
+                          G_io_apdu_buffer[tx++] = 0xFF;
+
+                          os_memmove(G_io_apdu_buffer + tx,
+                            &operationContext.txAmountData[i], 8);
+                          tx += 8;
+                          G_io_apdu_buffer[tx++] = 0xFF;
+                      }
+                  }
+
+                  G_io_apdu_buffer[tx++] = 0x90;
+                  G_io_apdu_buffer[tx++] = 0x00;
+                  // Send back the response, do not restart the event loop
+                  io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+                  // Display back the original UX
+                  ui_idle();
+
                 }
                 break;
                 #endif // INS_CBOR_DECODE_TEST_FUNC
