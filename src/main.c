@@ -15,7 +15,6 @@
 *  limitations under the License.
 ********************************************************************************/
 
-#include "cbor.h"
 #include "os.h"
 #include "cx.h"
 #include "blake2.h"
@@ -715,6 +714,25 @@ void ui_idle(void) {
     }
 }
 
+bool cbor_at_break(unsigned char *buffer, size_t offset)
+{
+    return cbor_at_end(buffer, offset) || buffer[offset] == CBOR_BREAK;
+}
+
+bool cbor_at_end(unsigned char *buffer, size_t offset)
+{
+    /* cbor_stream_t::pos points at the next *free* byte, hence the -1 */
+    return buffer ? offset >= operationContext.transactionLength - 1 : true;
+}
+
+size_t cbor_deserialize_array_indefinite(unsigned char *buffer, size_t offset)
+{
+    if (buffer[offset] != (CBOR_ARRAY | CBOR_VAR_FOLLOWS)) {
+        return 0;
+    }
+
+    return 1;
+}
 
 void parse_cbor_transaction() {
 
