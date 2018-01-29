@@ -81,6 +81,11 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define OFFSET_LC 4
 #define OFFSET_CDATA 5
 
+#define CBOR_7              0xE0            /* type 7 (float and other types) */
+#define CBOR_ARRAY          0x80  /* type 4 */
+#define CBOR_VAR_FOLLOWS    31      /* 0x1f */
+#define CBOR_BREAK      (CBOR_7 | 31)
+
 unsigned char address_pre_base64[140];
 unsigned char address_base58_encoded[MAX_ADDR_OUT_LENGTH];
 
