@@ -37,6 +37,9 @@ unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_signing_completed(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_signing_aborted(const bagl_element_t *e);
 
+size_t cbor_deserialize_array_indefinite(unsigned char *buffer, size_t offset);
+bool cbor_at_end(unsigned char *buffer, size_t offset);
+bool cbor_at_break(unsigned char *buffer, size_t offset);
 
 unsigned int prepare_tx_preview_ui();
 
