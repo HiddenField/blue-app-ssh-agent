@@ -822,13 +822,13 @@ void parse_cbor_transaction() {
               // Skip CBOR int type
               offset++;
 
-              /* Don't need to capture checksum anymore.
+              #ifdef INS_CBOR_DECODE_TEST_FUNC
               // Address Checksum
               checkSumPtr = operationContext.message + offset;
               operationContext.addressData[otx_index] =
                   (checkSumPtr[3] << 24) | (checkSumPtr[2] << 16) |
                   (checkSumPtr[1] << 8) | (checkSumPtr[0]);
-              */
+              #endif
 
               // End of address at this offset
               offset += 4;
