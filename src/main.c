@@ -66,6 +66,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define INS_SET_INDEXES 0x07
 #define INS_SIGN_TX 0x06
 #define INS_BASE58_ENCODE_TEST 0x08
+#define INS_CBOR_DECODE_TEST 0x09
 #define INS_GET_RND_PUB_KEY 0x0C
 #define INS_GET_WALLET_INDEX 0x0E
 
@@ -1802,6 +1803,16 @@ void sample_main(void) {
                 }
                 break;
                 #endif //INS_SIGN_TX_FUNC
+
+
+
+
+
+                #ifdef INS_CBOR_DECODE_TEST_FUNC
+                case INS_CBOR_DECODE_TEST: {
+                }
+                break;
+                #endif // INS_CBOR_DECODE_TEST_FUNC
 
 
 
