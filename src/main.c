@@ -623,7 +623,7 @@ const bagl_element_t bagl_ui_signing_aborted_nanos[] = {
     },
     {
         {BAGL_ICON, 0x00, 120, 14, 8, 6, 0, 0, 0, 0xFFFFFF, 0x000000, 0,
-         BAGL_GLYPH_ICON_CHECK},
+         BAGL_GLYPH_ICON_CROSS},
         NULL,
         0,
         0,
