@@ -792,6 +792,9 @@ void parse_cbor_transaction() {
       THROW(0x6DDB);
   }
 
+  // Assuming this Tx needs to be signed itx_count number of times
+  tx_sign_counter = itx_count;
+
   // Scan through Output TXs
   operationContext.finalUTXOCount = 0;
   if(cbor_deserialize_array_indefinite(operationContext.message, offset) ) {
