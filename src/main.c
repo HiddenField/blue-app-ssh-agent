@@ -736,8 +736,8 @@ size_t cbor_deserialize_array_indefinite(unsigned char *buffer, size_t offset)
 
 void parse_cbor_transaction() {
 
-  cbor_stream_t stream;
-  cbor_init(&stream, operationContext.message, operationContext.transactionLength);
+  //cbor_stream_t stream;
+  //cbor_init(&stream, operationContext.message, operationContext.transactionLength);
 
   uint8_t array_length;
   //uint32_t int_value;
@@ -746,13 +746,14 @@ void parse_cbor_transaction() {
   uint8_t itx_count = 0;
   uint8_t otx_index = 0;
 
-  uint32_t offset = cbor_deserialize_array(&stream, 0, &array_length);
+  //uint32_t offset = cbor_deserialize_array(&stream, 0, &array_length);
+  uint32_t offset = 1;
   if(offset != 1) { THROW(0x6DDE); }
 
   // Scan through Input TX and ensure they're valid
-  if(cbor_deserialize_array_indefinite(&stream, offset) ) {
+  if(cbor_deserialize_array_indefinite(operationContext.message, offset) ) {
       offset++;
-      while(!cbor_at_break(&stream, offset) && !error) {
+      while(!cbor_at_break(operationContext.message, offset) && !error) {
           itx_count++;
           // TODO: These methods are returning 0 on the
           // Ledger. Work out why...
@@ -782,15 +783,13 @@ void parse_cbor_transaction() {
       error = true;
       THROW(0x6DDB);
   }
-  // Assuming this Tx needs to be signed itx_count number of times
-  tx_sign_counter = itx_count;
 
   // Scan through Output TXs
   operationContext.finalUTXOCount = 0;
-  if(cbor_deserialize_array_indefinite(&stream, offset) ) {
+  if(cbor_deserialize_array_indefinite(operationContext.message, offset) ) {
       offset ++;
 
-      while(!cbor_at_break(&stream, offset) && !error) {
+      while(!cbor_at_break(operationContext.message, offset) && !error) {
           // TODO: These methods are returning 0 on the
           // Ledger. Work out why...
           //offset += cbor_deserialize_array(&stream, offset, &array_length);
@@ -811,13 +810,14 @@ void parse_cbor_transaction() {
               // Skip CBOR int type
               offset++;
 
+              /* Don't need to capture checksum anymore.
               // Address Checksum
               checkSumPtr = operationContext.message + offset;
-              /*
               operationContext.addressData[otx_index] =
                   (checkSumPtr[3] << 24) | (checkSumPtr[2] << 16) |
                   (checkSumPtr[1] << 8) | (checkSumPtr[0]);
               */
+
               // End of address at this offset
               offset += 4;
 
@@ -886,8 +886,7 @@ void parse_cbor_transaction() {
   }
 
   operationContext.finalUTXOCount = otx_index;
-
-  cbor_destroy(&stream);
+  //cbor_destroy(&stream);
 
 }
 
