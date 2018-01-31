@@ -62,9 +62,6 @@ To set up your environment on Mac, using [Vagrant](https://www.vagrantup.com) is
 	cd apps/ledger-cardano-app
 	make load
 	```
-6. To remove the app, use `make delete`.
-
-
 #### Known Issues
 
 * At present, the Vagrant setup does not include adding the ARM toolchain to the path, which is required for compilation. This can be resolved by adding the following to `~/.bashrc`:
@@ -84,3 +81,25 @@ To set up your environment on Mac, using [Vagrant](https://www.vagrantup.com) is
 	```
     
 [1] *Note that this is because Docker for Mac does not support USB connectivity due to [xhyve limitations](https://github.com/mist64/xhyve#what-is-bhyve)*
+
+## Deploying
+
+The build process is managed with [Make](https://www.gnu.org/software/make/).
+
+### Commands
+
+* `make clean`: Clean the build and output directories
+* `make delete`: Remove the application from the device
+* `make load`: Load the app onto the Ledger device
+
+### Build Variants
+
+To specify a build variant, simply use `make load VARIANT=<variant>`. If left blank, the default `prod` variant will be built. Variants are as follows:
+
+| Name | Description                |
+|------|----------------------------|
+| prod | Public API                 |
+| test | Core functions for testing |
+
+See `Makefile` for list of included functions.
+
