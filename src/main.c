@@ -54,27 +54,25 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define MAX_CHAR_PER_ADDR 13
 #define MAX_ADDR_OUT_LENGTH 200
 
-#define ADA_COIN_TYPE 0x717
+#define ADA_ROOT_BIP32_PATH_LEN 0x02
 #define ADA_ADDR_BIP32_PATH_LEN 0x04
 #define BIP_44 0x2C
+#define ADA_COIN_TYPE 0x717
+#define ADA_ACCOUNT 0x00
 #define HARDENED_BIP32 0x80000000
 
 #define CLA 0x80
 #define INS_GET_PUBLIC_KEY 0x02
-#define INS_HASH 0x04
 #define INS_SET_TX 0x05
-#define INS_SET_INDEXES 0x07
 #define INS_SIGN_TX 0x06
+#define INS_HASH_TEST_TEST 0x04
 #define INS_BASE58_ENCODE_TEST 0x08
 #define INS_CBOR_DECODE_TEST 0x09
-#define INS_GET_RND_PUB_KEY 0x0C
-#define INS_GET_WALLET_INDEX 0x0E
 
 #define P1_FIRST 0x01
 #define P1_NEXT 0x02
-#define P2_CURVE25519 0x02
-#define P2_RANDOM_INDEX 0x04
-#define P2_PASSED_IN_INDEX 0x06
+#define P1_RECOVERY_PASSPHRASE 0x01
+#define P1_ADDRESS_PUB_KEY 0x02
 #define P2_SINGLE_TX 0x00
 #define P2_MULTI_TX 0x02
 
@@ -85,17 +83,15 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define OFFSET_LC 4
 #define OFFSET_CDATA 5
 
-#define CBOR_7              0xE0            /* type 7 (float and other types) */
+#define CBOR_7              0xE0  /* type 7 (float and other types) */
 #define CBOR_ARRAY          0x80  /* type 4 */
-#define CBOR_VAR_FOLLOWS    31      /* 0x1f */
+#define CBOR_VAR_FOLLOWS    31    /* 0x1f */
 #define CBOR_BREAK      (CBOR_7 | 31)
 
 unsigned char address_pre_base64[140];
 unsigned char address_base58_encoded[MAX_ADDR_OUT_LENGTH];
 
 unsigned char G_io_seproxyhal_spi_buffer[IO_SEPROXYHAL_BUFFER_SIZE_B];
-
-ux_state_t ux;
 
 // display stepped screens
 unsigned int ux_step;
@@ -105,12 +101,10 @@ typedef struct operationContext_t {
     uint8_t pathLength;
     uint32_t bip32Path[MAX_BIP32_PATH];
     cx_ecfp_public_key_t publicKey;
-    cx_curve_t curve;
-    cx_sha256_t hash;
     unsigned char chainCode[32];
     bool direct;
     bool fullMessageHash;
-    bool getPublicKey;
+    bool getWalletRecoveryPassphrase;
     bool usePassedInIndex;
     uint8_t message[MAX_MSG];
     uint32_t messageLength;
@@ -119,7 +113,6 @@ typedef struct operationContext_t {
     uint8_t finalUTXOCount;
     uint64_t txAmountData[MAX_TX_OUTPUTS];
     uint8_t hashTX[32];
-
     #ifdef INS_CBOR_DECODE_TEST_FUNC
     uint32_t addressData[16];
     #endif
@@ -1234,12 +1227,13 @@ unsigned int io_seproxyhal_touch_address_ok(const bagl_element_t *e) {
     os_memmove(G_io_apdu_buffer + tx, operationContext.publicKey.W, 65);
     tx += 65;
 
-    // output chain code
-    os_memmove(G_io_apdu_buffer + tx,
-               operationContext.chainCode,
-               sizeof(operationContext.chainCode));
-    tx += sizeof(operationContext.chainCode);
-
+    if(operationContext.getWalletRecoveryPassphrase) {
+        // output chain code
+        os_memmove(G_io_apdu_buffer + tx,
+                   operationContext.chainCode,
+                   sizeof(operationContext.chainCode));
+        tx += sizeof(operationContext.chainCode);
+    }
 
     G_io_apdu_buffer[tx++] = 0x90;
     G_io_apdu_buffer[tx++] = 0x00;
@@ -1366,179 +1360,66 @@ void sample_main(void) {
 
                 switch (G_io_apdu_buffer[1]) {
 
-                #ifdef INS_GET_WALLET_INDEX_FUNC
-                case INS_GET_WALLET_INDEX: {
-                    //uint8_t privateKeyData[32];
-                    uint32_t i;
-
-                    operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
-
-                    operationContext.bip32Path[0] = BIP_44 | HARDENED_BIP32;
-                    operationContext.bip32Path[1] = ADA_COIN_TYPE |
-                                                    HARDENED_BIP32;
-
-                    for (i = 0; i < HARDENED_BIP32; i++) {
-
-                      operationContext.bip32Path[2] = i | HARDENED_BIP32;
-
-                      derive_bip32_node_private_key(privateKeyData);
-
-                      if(privateKeyData[31] == 0) {
-                          break;
-                      }
-                    }
-
-                    uint32_t tx = 0;
-                    G_io_apdu_buffer[tx++] = 4;
-                    os_memmove(G_io_apdu_buffer + tx, &i, 4);
-                    tx += 4;
-                    G_io_apdu_buffer[tx++] = 0x90;
-                    G_io_apdu_buffer[tx++] = 0x00;
-                    // Send back the response, do not restart the event loop
-                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-                    // Display back the original UX
-                    ui_idle();
-                }
-
-                break;
-                #endif //INS_GET_WALLET_INDEX_FUNC
-
-                #ifdef INS_GET_RND_PUB_KEY_FUNC
-                case INS_GET_RND_PUB_KEY: {
-                    //uint8_t privateKeyData[32];
-                    //cx_ecfp_private_key_t privateKey;
-                    dataBuffer = G_io_apdu_buffer + OFFSET_CDATA + 1;
-
-                    // Ada addresses are at a fixed depth of 5. Using the
-                    // input apdu length field to determine if an address index
-                    // has been passed in.
-                    operationContext.pathLength =
-                        G_io_apdu_buffer[OFFSET_CDATA];
-                    if (operationContext.pathLength == 0x00) {
-                        operationContext.usePassedInIndex = false;
-                    } else {
-                        operationContext.usePassedInIndex = true;
-                    }
-
-                    if ((G_io_apdu_buffer[OFFSET_P1] != 0) ||
-                        (G_io_apdu_buffer[OFFSET_P2] != P2_CURVE25519)) {
-                        THROW(0x6B00);
-                    }
-
-                    operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
-
-                    operationContext.bip32Path[0] = BIP_44 | HARDENED_BIP32;
-                    operationContext.bip32Path[1] = ADA_COIN_TYPE |
-                                                    HARDENED_BIP32;
-                    /*
-                    //TODO: Call and store Wallet_Index based on Cardano scheme
-                    // for deducing what a valid index is, as this is not
-                    // normally 0.
-                    //
-                    // Path Depth 2 == Wallet Index
-                    */
-                    operationContext.bip32Path[2] = 0 | HARDENED_BIP32;
-                    // Path Depth 3 == Account Index - Hardcoded at 0 currently
-                    operationContext.bip32Path[3] = 0 | HARDENED_BIP32;
-
-                    if(operationContext.usePassedInIndex) {
-                        operationContext.bip32Path[4] =
-                           (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-                           (dataBuffer[2] << 8) | (dataBuffer[3]);
-                    } else {
-                        operationContext.bip32Path[4] =
-                        generate_random_hardened_index();
-                    }
-
-                    derive_bip32_node_private_key(privateKeyData);
-
-                    cx_ecfp_init_private_key(CX_CURVE_Ed25519,
-                                              privateKeyData, 32,
-                                              &privateKey);
-#if ((CX_APILEVEL >= 5) && (CX_APILEVEL < 7))
-
-                    cx_ecfp_init_public_key(CX_CURVE_Ed25519, NULL, 0,
-                                                &operationContext.publicKey);
-                    cx_eddsa_get_public_key(&privateKey,
-                                                &operationContext.publicKey);
-#else
-                    cx_ecfp_generate_pair(CX_CURVE_Ed25519,
-                                          &operationContext.publicKey,
-                                          &privateKey, 1);
-#endif
-                    os_memset(&privateKey, 0, sizeof(privateKey));
-                    os_memset(privateKeyData, 0, sizeof(privateKeyData));
-
-                    if (os_seph_features() &
-                        SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
-                        //Blue Not supported
-                        THROW(0x600C);
-                    } else {
-                        UX_DISPLAY(ui_address_nanos, NULL);
-                    }
-                    flags |= IO_ASYNCH_REPLY;
-                }
-
-                break;
-                #endif //INS_GET_RND_PUB_KEY_FUNC
-
-
-
                 #ifdef INS_GET_PUBLIC_KEY_FUNC
                 case INS_GET_PUBLIC_KEY: {
-                    //uint8_t privateKeyData[32];
 
-                    dataBuffer = G_io_apdu_buffer + OFFSET_CDATA + 1;
+                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
+                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
+                    dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
 
-                    operationContext.pathLength =
-                        G_io_apdu_buffer[OFFSET_CDATA];
-                    if ((operationContext.pathLength < 0x01) ||
-                        (operationContext.pathLength > MAX_BIP32_PATH)) {
+                    if(p1 == P1_RECOVERY_PASSPHRASE) {
+                        operationContext.getWalletRecoveryPassphrase = true;
+                        operationContext.pathLength = ADA_ROOT_BIP32_PATH_LEN;
 
-                        THROW(0x6a80);
-                    }
+                        operationContext.bip32Path[0] = BIP_44 |
+                                                          HARDENED_BIP32;
+                        operationContext.bip32Path[1] = ADA_COIN_TYPE |
+                                                          HARDENED_BIP32;
 
-                    // Ensure ED25519 Curve is being requested
-                    if ((G_io_apdu_buffer[OFFSET_P1] != 0) ||
-                        ((G_io_apdu_buffer[OFFSET_P2] != P2_CURVE25519))) {
-                        THROW(0x6B00);
-                    }
+                    } else if (p1 == P1_ADDRESS_PUB_KEY) {
+                        operationContext.getWalletRecoveryPassphrase = false;
+                        operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
 
-                    // Get BIP32 address being requested
-                    for (int i = 0; i < operationContext.pathLength; i++) {
-                        operationContext.bip32Path[i] =
-                            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-                            (dataBuffer[2] << 8) | (dataBuffer[3]);
-                        dataBuffer += 4;
+                        operationContext.bip32Path[0] = BIP_44 |
+                                                          HARDENED_BIP32;
+                        operationContext.bip32Path[1] = ADA_COIN_TYPE |
+                                                          HARDENED_BIP32;
+                        operationContext.bip32Path[2] = ADA_ACCOUNT |
+                                                          HARDENED_BIP32;
+                        operationContext.bip32Path[3] = (dataBuffer[0] << 24) |
+                                                        (dataBuffer[1] << 16) |
+                                                        (dataBuffer[2] << 8)  |
+                                                        (dataBuffer[3]);
+                        if(operationContext.bip32Path[3] < HARDENED_BIP32) {
+                            //TODO: Set error code
+                            THROW(0x5020);
+                        }
+                    } else {
+                        //TODO: Set error code
+                        THROW(0x5021);
                     }
 
                     derive_bip32_node_private_key(privateKeyData);
-                    cx_ecfp_init_private_key(CX_CURVE_Ed25519, privateKeyData, 32,
+                    cx_ecfp_init_private_key(CX_CURVE_Ed25519,
+                                             privateKeyData,
+                                             32,
                                              &privateKey);
 
-#if ((CX_APILEVEL >= 5) && (CX_APILEVEL < 7))
-
-                    cx_ecfp_init_public_key(curve, NULL, 0,
-                                            &operationContext.publicKey);
-                    cx_eddsa_get_public_key(&privateKey,
-                                            &operationContext.publicKey);
-
-#else
-                    cx_ecfp_generate_pair(CX_CURVE_Ed25519,
-                                          &operationContext.publicKey,
-                                          &privateKey, 1);
-#endif
+                    #if ((CX_APILEVEL >= 5) && (CX_APILEVEL < 7))
+                        cx_ecfp_init_public_key(CX_CURVE_Ed25519, NULL, 0,
+                                                &operationContext.publicKey);
+                        cx_eddsa_get_public_key(&privateKey,
+                                                &operationContext.publicKey);
+                    #else
+                        cx_ecfp_generate_pair(CX_CURVE_Ed25519,
+                                              &operationContext.publicKey,
+                                              &privateKey, 1);
+                    #endif
 
                     os_memset(&privateKey, 0, sizeof(privateKey));
                     os_memset(privateKeyData, 0, sizeof(privateKeyData));
 
-                    if (os_seph_features() &
-                        SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
-                        // Ledger Blue not supported
-                        THROW(0x600C);
-                    } else {
-                        UX_DISPLAY(ui_address_nanos, NULL);
-                    }
+                    UX_DISPLAY(ui_address_nanos, NULL);
                     flags |= IO_ASYNCH_REPLY;
                 }
 
@@ -1548,8 +1429,8 @@ void sample_main(void) {
 
 
 
-                #ifdef INS_HASH_FUNC
-                case INS_HASH: {
+                #ifdef INS_HASH_TEST_FUNC
+                case INS_HASH_TEST: {
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
@@ -1629,7 +1510,7 @@ void sample_main(void) {
                 }
 
                 break;
-                #endif //INS_HASH_FUNC
+                #endif //INS_HASH_TEST_FUNC
 
 
 
@@ -1957,8 +1838,9 @@ void sample_main(void) {
             }
             CATCH_OTHER(e) {
                 switch (e & 0xF000) {
-                case 0x6000:
-                case 0x9000:
+                case 0x6000:  // System Error Codes
+                case 0x5000:  // Application Error Codes
+                case 0x9000:  // Success Codes
                     sw = e;
                     break;
                 default:
