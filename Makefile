@@ -20,8 +20,12 @@ $(error Environment variable BOLOS_SDK is not set)
 endif
 include $(BOLOS_SDK)/Makefile.defines
 
+SIGNKEY = `cat sign.key`
+APPSIG = `cat bin/app.sig`
+
 APPNAME = "Cardano ADA"
-APP_LOAD_PARAMS=--appFlags 0 --curve ed25519 --curve prime256r1 --path "44'/1815'" $(COMMON_LOAD_PARAMS)
+APP_LOAD_PARAMS =--appFlags 0 --curve ed25519 --path "44'/1815'"
+APP_LOAD_PARAMS += --rootPrivateKey $(SIGNKEY) $(COMMON_LOAD_PARAMS)
 APPVERSION_M=0
 APPVERSION_N=0
 APPVERSION_P=1
@@ -36,19 +40,6 @@ all: default
 ############
 # Platform #
 ############
-
-ifeq ($(VARIANT),test)
-  DEFINES   += INS_HASH_FUNC
-  DEFINES   += INS_BASE58_ENCODE_TEST_FUNC
-  DEFINES   += INS_CBOR_DECODE_TEST_FUNC
-else
-  DEFINES   += INS_SIGN_TX_FUNC
-  DEFINES   += INS_SET_TX_FUNC
-  DEFINES   += INS_GET_PUBLIC_KEY_FUNC
-# DEFINES   += INS_GET_WALLET_INDEX_FUNC
-# DEFINES   += INS_GET_RND_PUB_KEY_FUNC
-endif
-
 DEFINES   += OS_IO_SEPROXYHAL IO_SEPROXYHAL_BUFFER_SIZE_B=128
 DEFINES   += HAVE_BAGL HAVE_PRINTF
 DEFINES   += HAVE_IO_USB HAVE_L4_USBLIB IO_USB_MAX_ENDPOINTS=6 IO_HID_EP_LENGTH=64 HAVE_USB_APDU
@@ -77,11 +68,42 @@ include $(BOLOS_SDK)/Makefile.glyphs
 APP_SOURCE_PATH  += src
 SDK_SOURCE_PATH  += lib_stusb lib_stusb_impl
 
-load: all
+##############
+#    Test    #
+##############
+test: all
+test: DEFINES += INS_HASH_FUNC
+test: DEFINES += INS_BASE58_ENCODE_TEST_FUNC
+test: DEFINES += INS_CBOR_DECODE_TEST_FUNC
+test:
 	python -m ledgerblue.loadApp $(APP_LOAD_PARAMS)
 
+build-test: all
+build-test: DEFINES += INS_HASH_FUNC INS_BASE58_ENCODE_TEST_FUNC INS_CBOR_DECODE_TEST_FUNC
+
+##############
+#   Build    #
+##############
+load: all
+load: DEFINES += INS_SIGN_TX_FUNC
+load: DEFINES += INS_SET_TX_FUNC
+load: DEFINES += INS_GET_PUBLIC_KEY_FUNC
+#load: DEFINES += INS_GET_WALLET_INDEX_FUNC
+#load: DEFINES += INS_GET_RND_PUB_KEY_FUNC
+load:
+	python -m ledgerblue.loadApp $(APP_LOAD_PARAMS)
+
+build: all
+build: DEFINES += INS_SIGN_TX_FUNC INS_SET_TX_FUNC INS_GET_PUBLIC_KEY_FUNC
+
+sign:
+	python -m ledgerblue.signApp --hex bin/app.hex --key $(SIGNKEY) > bin/app.sig
+
+deploy:
+	python -m ledgerblue.loadApp $(APP_LOAD_PARAMS) --signature $(APPSIG)
+
 delete:
-	python -m ledgerblue.deleteApp $(COMMON_DELETE_PARAMS)
+	python -m ledgerblue.deleteApp $(COMMON_DELETE_PARAMS) --rootPrivateKey $(SIGNKEY)
 
 # import generic rules from the sdk
 include $(BOLOS_SDK)/Makefile.rules

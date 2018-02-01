@@ -32,7 +32,7 @@ To set up your environment on Mac, using [Vagrant](https://www.vagrantup.com) is
   # This is required for USB suppor
   brew cask install virtualbox-extension-pack
   brew cask install vagrant
- 
+
   ```
 
 2. Clone the [ledger-vagrant](https://github.com/fix/ledger-vagrant) project and bring up the vagrant machine:
@@ -48,7 +48,7 @@ To set up your environment on Mac, using [Vagrant](https://www.vagrantup.com) is
 	cd ledger-vagrant
 	cp -r <location>/ledger-cardano-app ./apps/
 	```
-	
+
 4. SSH into the Vagrant VM
 
 	```bash
@@ -79,27 +79,46 @@ To set up your environment on Mac, using [Vagrant](https://www.vagrantup.com) is
 
 	sudo pip install ledgerblue==0.1.15
 	```
-    
+
 [1] *Note that this is because Docker for Mac does not support USB connectivity due to [xhyve limitations](https://github.com/mist64/xhyve#what-is-bhyve)*
 
 ## Deploying
 
 The build process is managed with [Make](https://www.gnu.org/software/make/).
 
-### Commands
+### Setting Up Custom CA for signing Ledger App
 
-* `make clean`: Clean the build and output directories
-* `make delete`: Remove the application from the device
-* `make load`: Load the app onto the Ledger device
+To remove the prompts when installing, running and deleting the app from the Ledger device, you need to generate a Custom CA keypair.
 
-### Build Variants
+* `python -m ledgerblue.genCAPair` outputs key pair onto screen
+* Save private key into file sign.key in root directory
+* Load public key onto Ledger device:
+* `python -m ledgerblue.setupCustomCA --targetId 0x31100002 --public [PUBLIC KEY]`
 
-To specify a build variant, simply use `make load VARIANT=<variant>`. If left blank, the default `prod` variant will be built. Variants are as follows:
+The private key held in sign.key is required in the make commands below.
 
-| Name | Description                |
-|------|----------------------------|
-| prod | Public API                 |
-| test | Core functions for testing |
+### Make Commands
+
+* `clean`: Clean the build and output directories
+* `delete`: Remove the application from the device
+* `load`: Load the app onto the Ledger device with regular api
+* `test`: Load the app onto the Ledger device with test api
+* `build`: Build obj and bin api artefacts without loading
+* `build-test`: Build obj and bin test api artefacts without loading
+* `sign`: Sign current app.hex with CA private key
+* `deploy`: Load the current app.hex onto the Ledger device
 
 See `Makefile` for list of included functions.
 
+### Deploying Development API
+
+`make clean build sign deploy`
+
+### Deploying Test API
+
+`make clean test sign deploy`
+
+### Deploying Release
+
+Releases will need to be given to Ledger for signing with their private key.
+This will allow the application to be installed without warning prompts on any Ledger device.
