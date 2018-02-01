@@ -101,8 +101,8 @@ The private key held in sign.key is required in the make commands below.
 
 * `clean`: Clean the build and output directories
 * `delete`: Remove the application from the device
-* `load`: Load the app onto the Ledger device with regular api
-* `test`: Load the app onto the Ledger device with test api
+* `load`: Load signed app onto the Ledger device with regular api
+* `test`: Load signed app onto the Ledger device with test api
 * `build`: Build obj and bin api artefacts without loading
 * `build-test`: Build obj and bin test api artefacts without loading
 * `sign`: Sign current app.hex with CA private key
@@ -112,11 +112,13 @@ See `Makefile` for list of included functions.
 
 ### Deploying Development API
 
-`make clean build sign deploy`
+`make clean load`
+
+Use clean when switching between development and testing APIs to ensure correct interfaces are built. 
 
 ### Deploying Test API
 
-`make clean test sign deploy`
+`make clean test`
 
 ### Deploying Release
 

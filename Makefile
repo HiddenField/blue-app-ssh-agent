@@ -27,8 +27,8 @@ APPNAME = "Cardano ADA"
 APP_LOAD_PARAMS =--appFlags 0 --curve ed25519 --path "44'/1815'"
 APP_LOAD_PARAMS += --rootPrivateKey $(SIGNKEY) $(COMMON_LOAD_PARAMS)
 APPVERSION_M=0
-APPVERSION_N=0
-APPVERSION_P=1
+APPVERSION_N=1
+APPVERSION_P=0
 APPVERSION=$(APPVERSION_M).$(APPVERSION_N).$(APPVERSION_P)
 
 ICONNAME=icon.gif
@@ -69,37 +69,32 @@ APP_SOURCE_PATH  += src
 SDK_SOURCE_PATH  += lib_stusb lib_stusb_impl
 
 ##############
-#    Test    #
-##############
-test: all
-test: DEFINES += INS_HASH_FUNC
-test: DEFINES += INS_BASE58_ENCODE_TEST_FUNC
-test: DEFINES += INS_CBOR_DECODE_TEST_FUNC
-test:
-	python -m ledgerblue.loadApp $(APP_LOAD_PARAMS)
-
-build-test: all
-build-test: DEFINES += INS_HASH_FUNC INS_BASE58_ENCODE_TEST_FUNC INS_CBOR_DECODE_TEST_FUNC
-
-##############
 #   Build    #
 ##############
-load: all
-load: DEFINES += INS_SIGN_TX_FUNC
-load: DEFINES += INS_SET_TX_FUNC
-load: DEFINES += INS_GET_PUBLIC_KEY_FUNC
-#load: DEFINES += INS_GET_WALLET_INDEX_FUNC
-#load: DEFINES += INS_GET_RND_PUB_KEY_FUNC
-load:
-	python -m ledgerblue.loadApp $(APP_LOAD_PARAMS)
-
 build: all
-build: DEFINES += INS_SIGN_TX_FUNC INS_SET_TX_FUNC INS_GET_PUBLIC_KEY_FUNC
+build: DEFINES += INS_SIGN_TX_FUNC
+build: DEFINES += INS_SET_TX_FUNC
+build: DEFINES += INS_GET_PUBLIC_KEY_FUNC
+#build: DEFINES += INS_GET_WALLET_INDEX_FUNC
+#build: DEFINES += INS_GET_RND_PUB_KEY_FUNC
+
+build-test: all
+build-test: DEFINES += INS_HASH_FUNC
+build-test: DEFINES += INS_BASE58_ENCODE_TEST_FUNC
+build-test: DEFINES += INS_CBOR_DECODE_TEST_FUNC
 
 sign:
 	python -m ledgerblue.signApp --hex bin/app.hex --key $(SIGNKEY) > bin/app.sig
 
 deploy:
+	python -m ledgerblue.loadApp $(APP_LOAD_PARAMS) --signature $(APPSIG)
+
+load: build
+	python -m ledgerblue.signApp --hex bin/app.hex --key $(SIGNKEY) > bin/app.sig
+	python -m ledgerblue.loadApp $(APP_LOAD_PARAMS) --signature $(APPSIG)
+
+test: build-test
+	python -m ledgerblue.signApp --hex bin/app.hex --key $(SIGNKEY) > bin/app.sig
 	python -m ledgerblue.loadApp $(APP_LOAD_PARAMS) --signature $(APPSIG)
 
 delete:
