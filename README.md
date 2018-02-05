@@ -29,7 +29,7 @@ To set up your environment on Mac, using [Vagrant](https://www.vagrantup.com) is
 
   ```bash
   brew cask install virtualbox
-  # This is required for USB suppor
+  # This is required for USB support
   brew cask install virtualbox-extension-pack
   brew cask install vagrant
 
@@ -42,26 +42,85 @@ To set up your environment on Mac, using [Vagrant](https://www.vagrantup.com) is
     cd ledger-vagrant
     vagrant up
     ```
-3. Copying your code into the VM is done via the `apps` directory which is synced in Vagrant:
+3. Clone the application onto you machine
+
+    ```bash
+    # Where the application is cloned to is called LEDGER_CARDANO_HOME
+    # For testers and developers we would advise you to clone straight into the Vagrant VM's app folder      
+    git clone [CLONE_URL_OF_GIT_REPOSITORY]
+    ```
+
+4. Copying your code into the VM is done via the `apps` directory which is synced in Vagrant:
 
 	```bash
 	cd ledger-vagrant
-	cp -r <location>/ledger-cardano-app ./apps/
+	cp -r [LEDGER_CARDANO_HOME] ./apps/
 	```
 
-4. SSH into the Vagrant VM
+5. SSH into the Vagrant VM
 
 	```bash
 	# get the ID of the machine first
 	vagrant global-status
 	vagrant ssh <ID>
+  # You are now on the VM - note the prompt change
+  vagrant@vagrant-ubuntu-trusty-64:~$
 	```
-5. To deploy, simply run:
 
-	```bash
-	cd apps/ledger-cardano-app
-	make load
+6. Setup Custom CA - These commands are run inside the Vagrant VM (vagrant@vagrant-ubuntu-trusty-64:~$)
+
+  To remove the user warnings when installing, running and deleting the app from the Ledger device, you need to generate a Custom CA keypair.
+
+  ```bash
+  cd ~/apps/ledger-cardano-app
+  python -m ledgerblue.genCAPair
+  ```
+
+  This command will output the keypair onto the screen. Highlight the private key (after the colon) - Command + C
+
+  ```
+  Public key : 04180cf57eb2afc56ea26cc13a3a01839943a03b40d32110d401553a78a814b40b3c863f96e04f9a7710335fe920b3d0bec21529480341b381b21d7bc617b02160
+  Private key: d30b3e3d25dc84cec995d1163b21a970e32879a728eccf29fd455b9a70cbc3d1
+  ```
+
+  Save private key into file sign.key in root directory
+  ```bash
+  touch sign.key
+  echo [PASTE PRIVATE KEY] > sign.key
+  cat sign.key
+  # You should see the output of the private key
+  d30b3e3d25dc84cec995d1163b21a970e32879a728eccf29fd455b9a70cbc3d1
+  ```
+
+  Load public key onto Ledger device:
+
+  ```bash
+  cd ~/apps/ledger-cardano-app
+  python -m ledgerblue.setupCustomCA --targetId 0x31100002 --public [PUBLIC KEY]  
+  ```  
+
+7. To deploy, simply run:
+
+	```bash    
+	vagrant@vagrant-ubuntu-trusty-64:~$ cd apps/ledger-cardano-app
+  # Delete the current application if you are testing/building a different version
+  vagrant@vagrant-ubuntu-trusty-64:~$ make delete
+  # Build and load the application onto the Nano S
+	vagrant@vagrant-ubuntu-trusty-64:~$ make clean load
 	```
+8. To build test build and deploy:
+
+  ```bash    
+  # Same as normal build above, but instead:
+  vagrant@vagrant-ubuntu-trusty-64:~$ make clean test
+  ```
+
+9. Shutdown VM - You must exit the VM in order for the host machine to regain visibility of the Ledger device.
+
+  ```bash
+  vagrant@vagrant-ubuntu-trusty-64:~$ exit
+   ```
+
 #### Known Issues
 
 * At present, the Vagrant setup does not include adding the ARM toolchain to the path, which is required for compilation. This can be resolved by adding the following to `~/.bashrc`:
@@ -80,22 +139,13 @@ To set up your environment on Mac, using [Vagrant](https://www.vagrantup.com) is
 	sudo pip install ledgerblue==0.1.15
 	```
 
+* When the Vagrant VM is running you do not have access to the Ledger device on the host machine. You need to shutdown the VM first.
+
 [1] *Note that this is because Docker for Mac does not support USB connectivity due to [xhyve limitations](https://github.com/mist64/xhyve#what-is-bhyve)*
 
 ## Deploying
 
 The build process is managed with [Make](https://www.gnu.org/software/make/).
-
-### Setting Up Custom CA for signing Ledger App
-
-To remove the prompts when installing, running and deleting the app from the Ledger device, you need to generate a Custom CA keypair.
-
-* `python -m ledgerblue.genCAPair` outputs key pair onto screen
-* Save private key into file sign.key in root directory
-* Load public key onto Ledger device:
-* `python -m ledgerblue.setupCustomCA --targetId 0x31100002 --public [PUBLIC KEY]`
-
-The private key held in sign.key is required in the make commands below.
 
 ### Make Commands
 
@@ -114,7 +164,7 @@ See `Makefile` for list of included functions.
 
 `make clean load`
 
-Use clean when switching between development and testing APIs to ensure correct interfaces are built. 
+Use clean when switching between development and testing APIs to ensure correct interfaces are built.
 
 ### Deploying Test API
 
