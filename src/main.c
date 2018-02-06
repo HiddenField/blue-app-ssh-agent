@@ -97,6 +97,8 @@ unsigned char G_io_seproxyhal_spi_buffer[IO_SEPROXYHAL_BUFFER_SIZE_B];
 unsigned int ux_step;
 unsigned int ux_step_count;
 
+ux_state_t ux;
+
 typedef struct operationContext_t {
     uint8_t pathLength;
     uint32_t bip32Path[MAX_BIP32_PATH];
