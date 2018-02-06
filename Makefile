@@ -81,6 +81,8 @@ build-test: DEFINES += INS_HASH_TEST_FUNC
 build-test: DEFINES += INS_BASE58_ENCODE_TEST_FUNC
 build-test: DEFINES += INS_CBOR_DECODE_TEST_FUNC
 
+headless: DEFINES += HEADLESS
+
 sign:
 	python -m ledgerblue.signApp --hex bin/app.hex --key $(SIGNKEY) > bin/app.sig
 
@@ -94,6 +96,9 @@ load: build
 test: build-test
 	python -m ledgerblue.signApp --hex bin/app.hex --key $(SIGNKEY) > bin/app.sig
 	python -m ledgerblue.loadApp $(APP_LOAD_PARAMS) --signature $(APPSIG)
+
+headless: load
+
 
 delete:
 	python -m ledgerblue.deleteApp $(COMMON_DELETE_PARAMS) --rootPrivateKey $(SIGNKEY)
