@@ -1035,6 +1035,7 @@ void io_exchange_address() {
 
 void io_exchange_set_tx() {
     uint32_t tx = 0;
+    G_io_apdu_buffer[tx++] = tx_sign_counter;
     G_io_apdu_buffer[tx++] = operationContext.finalUTXOCount;
 
     for (int i=0; i < operationContext.finalUTXOCount; i++ ) {
