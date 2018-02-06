@@ -744,52 +744,34 @@ size_t cbor_deserialize_array_indefinite(unsigned char *buffer, size_t offset)
 
 void parse_cbor_transaction() {
 
-  //cbor_stream_t stream;
-  //cbor_init(&stream, operationContext.message, operationContext.transactionLength);
-
   uint8_t array_length;
-  //uint32_t int_value;
-  //bool at_tag = false;
   bool error = false;
   uint8_t itx_count = 0;
   uint8_t otx_index = 0;
-
-  //uint32_t offset = cbor_deserialize_array(&stream, 0, &array_length);
   uint32_t offset = 1;
-  if(offset != 1) { THROW(0x6DDE); }
 
   // Scan through Input TX and ensure they're valid
   if(cbor_deserialize_array_indefinite(operationContext.message, offset) ) {
       offset++;
       while(!cbor_at_break(operationContext.message, offset) && !error) {
           itx_count++;
-          // TODO: These methods are returning 0 on the
-          // Ledger. Work out why...
-          //offset += cbor_deserialize_array(&stream, offset, &array_length);
-          //offset += cbor_deserialize_int(&stream, offset, &int_value);
           // Skip tag
           offset += 4;
           if(operationContext.message[offset] == 0x58) {
               array_length = operationContext.message[++offset];
-              //THROW(0xAA00 | array_length);
               // Skip Array Length
               offset += (array_length + 1);
           } else {
-
               error = true;
 
-              if(itx_count != 1) {
-                  THROW(0x6E00 | operationContext.message[offset]);
-              }
-
-              THROW(0x6DDA);
+              THROW(0x5901);
           }
       }
       offset++;
   } else {
       // Invalid TX, must have at least one input
       error = true;
-      THROW(0x6DDB);
+      THROW(0x5902);
   }
 
   // Assuming this Tx needs to be signed itx_count number of times
@@ -801,10 +783,6 @@ void parse_cbor_transaction() {
       offset ++;
 
       while(!cbor_at_break(operationContext.message, offset) && !error) {
-          // TODO: These methods are returning 0 on the
-          // Ledger. Work out why...
-          //offset += cbor_deserialize_array(&stream, offset, &array_length);
-          //offset += cbor_deserialize_array(&stream, offset, &array_length);
           // Skip tag
           offset += 4;
           if(operationContext.message[offset] == 0x58) {
@@ -812,12 +790,8 @@ void parse_cbor_transaction() {
               address_start_index = operationContext.message + offset - 3;
 
               array_length = operationContext.message[++offset];
-              //THROW(0x6600 + array_length);
               // Skip Array Length
               offset += array_length +1;
-              // TODO: These methods are returning 0 on the
-              // Ledger. Work out why...
-              //offset += cbor_deserialize_int64_t(&stream, offset, &addr_checksum);
               // Skip CBOR int type
               offset++;
 
@@ -834,7 +808,6 @@ void parse_cbor_transaction() {
 
               // Base58 Encode Address
               raw_address_length = array_length + 10;
-              //THROW(0x6600 + raw_address_length);
 
               os_memset(address_base58_encoded, 0, MAX_ADDR_OUT_LENGTH);
               base58_address_length = ada_encode_base58(
@@ -842,7 +815,6 @@ void parse_cbor_transaction() {
                 raw_address_length,
                 address_base58_encoded,
                 MAX_ADDR_OUT_LENGTH);
-
 
               // Capture address UI here
               // Attempt WITH Base58 Encoding
@@ -854,17 +826,7 @@ void parse_cbor_transaction() {
                          address_base58_encoded + base58_address_length - 5,
                          5);
               ui_addresses[otx_index][MAX_CHAR_PER_ADDR] = '\0';
-              /*
-              // Attempt without Base58 Encoding
-              os_memset(ui_address, 0, MAX_CHAR_PER_ADDR);
-              os_memmove(ui_address, address_start_index , 5);
-              os_memmove(ui_address + 5, "...", 3);
-              os_memmove(ui_address + 8,
-                         address_start_index + raw_address_length - 5, 5);
-              ui_addresses[otx_index][MAX_CHAR_PER_ADDR] = '\0';
-              */
 
-              //offset += cbor_deserialize_int64_t(&stream, offset, &addr_checksum);
               // Skip CBOR int type
               offset++;
 
@@ -879,41 +841,24 @@ void parse_cbor_transaction() {
                        ((uint64_t)txAmount[2] << 40) |
                        ((uint64_t)txAmount[1] << 48) |
                        ((uint64_t)txAmount[0] << 56);
-
               offset += 8;
 
               otx_index++;
 
           } else {
+              // Invalid Output Tx Format
               error = true;
-              THROW(0x6DDC);
+              THROW(0x5903);
           }
-
       }
   } else {
       // Invalid TX, must have at least one output
       error = true;
-      THROW(0x6DDD);
+      THROW(0x5904);
   }
 
   operationContext.finalUTXOCount = otx_index;
-  //cbor_destroy(&stream);
 
-}
-
-uint32_t generate_random_hardened_index() {
-
-    uint32_t random_hardened_index = 0;
-
-    uint8_t tmp[4];
-    cx_rng(tmp, 4);
-    random_hardened_index = 0x80000000 |
-                        (tmp[0] << 24) |
-                        (tmp[1] << 16) |
-                        (tmp[2] << 8) |
-                         tmp[3];
-
-    return random_hardened_index;
 }
 
 bool adjustDecimals(char *src, uint32_t srcLength, char *target,
