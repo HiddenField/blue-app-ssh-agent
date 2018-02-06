@@ -97,7 +97,11 @@ unsigned char G_io_seproxyhal_spi_buffer[IO_SEPROXYHAL_BUFFER_SIZE_B];
 unsigned int ux_step;
 unsigned int ux_step_count;
 
+ux_state_t ux;
+
 typedef struct operationContext_t {
+    uint8_t *dataBuffer;
+    uint32_t dataOffset;
     uint8_t pathLength;
     uint32_t bip32Path[MAX_BIP32_PATH];
     cx_ecfp_public_key_t publicKey;
@@ -107,9 +111,7 @@ typedef struct operationContext_t {
     bool getWalletRecoveryPassphrase;
     bool usePassedInIndex;
     uint8_t message[MAX_TX_SIZE];
-    uint32_t messageLength;
     uint64_t transactionLength;
-    uint32_t transactionOffset;
     uint8_t finalUTXOCount;
     uint64_t txAmountData[MAX_TX_OUTPUTS];
     uint8_t hashTX[32];
@@ -131,7 +133,6 @@ uint8_t *txAmount;
 uint32_t *current_signing_address_i;
 uint8_t privateKeyData[32];
 cx_ecfp_private_key_t privateKey;
-uint8_t *dataBuffer;
 bool is_tx_set;
 uint8_t tx_sign_counter;
 
@@ -1038,10 +1039,26 @@ void parse_uint32(uint32_t *value, uint8_t *data) {
              ((uint32_t)data[1] << 16) | ((uint32_t)data[0] << 24);
 }
 
+/**
+ * Check incoming data length does not exceed message buffer.
+ * Copies data to buffer is within range.
+ * Throws: 5001 if buffer is exceeded.
+ */
+void checkAndCopyDataToBuffer(uint8_t dataLengthIn) {
+    if(operationContext.dataOffset + dataLengthIn > (MAX_TX_SIZE + 1))
+    {
+        THROW(0x5001);
+    } else {
+        os_memmove(operationContext.message +
+                operationContext.dataOffset,
+                operationContext.dataBuffer, dataLengthIn);
+        operationContext.dataOffset += dataLengthIn;
+    }
+}
+
 void resetSigningTx() {
     tx_ui_t.tx_ui_step = -1;
     os_memset(operationContext.message, 0, MAX_TX_SIZE);
-    operationContext.messageLength = 0;
     operationContext.transactionLength = 0;
     os_memset(operationContext.hashTX, 0, 32);
     is_tx_set = false;
@@ -1365,7 +1382,7 @@ void sample_main(void) {
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
 
                     if(p1 == P1_RECOVERY_PASSPHRASE) {
                         operationContext.getWalletRecoveryPassphrase = true;
@@ -1386,10 +1403,10 @@ void sample_main(void) {
                                                           HARDENED_BIP32;
                         operationContext.bip32Path[2] = ADA_ACCOUNT |
                                                           HARDENED_BIP32;
-                        operationContext.bip32Path[3] = (dataBuffer[0] << 24) |
-                                                        (dataBuffer[1] << 16) |
-                                                        (dataBuffer[2] << 8)  |
-                                                        (dataBuffer[3]);
+                        operationContext.bip32Path[3] = (operationContext.dataBuffer[0] << 24) |
+                                                        (operationContext.dataBuffer[1] << 16) |
+                                                        (operationContext.dataBuffer[2] << 8)  |
+                                                        (operationContext.dataBuffer[3]);
                         if(operationContext.bip32Path[3] < HARDENED_BIP32) {
                             //TODO: Set error code
                             THROW(0x5020);
@@ -1434,11 +1451,11 @@ void sample_main(void) {
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
                     uint32_t dataLength =
                         (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
                         (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
-                    dataBuffer += 4;
+                    operationContext.dataBuffer += 4;
 
                     // First APDU -
                     if (p1 == P1_FIRST) {
@@ -1449,25 +1466,18 @@ void sample_main(void) {
                             dataLength = MAX_CHUNK_SIZE;
                         }
 
-                        operationContext.transactionOffset = 0;
+                        operationContext.dataOffset = 0;
                         operationContext.fullMessageHash = false;
                     } else if (p1 != P1_NEXT) {
                         THROW(0x6B00);
                     }
 
                     // Other APDU Packets - Check buffers have space
-                    if(operationContext.transactionOffset + dataLength > MAX_TX_SIZE)
-                    {
-                        THROW(0x5001);
-                    } else {
-                        os_memmove(operationContext.message +
-                                operationContext.transactionOffset,
-                                dataBuffer, dataLength);
-                        operationContext.transactionOffset += dataLength;
-                    }
+                    checkAndCopyDataToBuffer(dataLength);
+
 
                     // Check message complete
-                    if(operationContext.transactionOffset ==
+                    if(operationContext.dataOffset ==
                       operationContext.transactionLength
                     ) {
                         operationContext.fullMessageHash = true;
@@ -1530,41 +1540,32 @@ void sample_main(void) {
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
                     uint32_t dataLength =
                         (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
                         (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
-                    dataBuffer += 4;
+                    operationContext.dataBuffer += 4;
 
                     // First APDU -
                     if (p1 == P1_FIRST) {
                         // First APDU contains total transaction length
                         operationContext.transactionLength = dataLength;
-                        /*
-                        if(operationContext.messageLength != 314) {
-                            THROW(0x6B01);
-                        }
-                        */
+
                         if(p2 == P2_MULTI_TX) {
                             dataLength = MAX_CHUNK_SIZE;
                         } else if (p2 != P2_SINGLE_TX) {
                             THROW(0x6B02);
                         }
-                        operationContext.transactionOffset = 0;
+                        operationContext.dataOffset = 0;
                         operationContext.fullMessageHash = false;
                     } else if (p1 != P1_NEXT) {
                         THROW(0x6B00);
                     }
 
-                    //dataBuffer = G_io_apdu_buffer + OFFSET_LC + 4;
+                    // Other APDU Packets - Check buffers have space
+                    checkAndCopyDataToBuffer(dataLength);
 
-                    os_memmove(operationContext.message +
-                                operationContext.transactionOffset,
-                               dataBuffer, dataLength);
-
-                    operationContext.transactionOffset += dataLength;
-
-                    if(operationContext.transactionOffset ==
+                    if(operationContext.dataOffset ==
                       operationContext.transactionLength
                     ) {
                         operationContext.fullMessageHash = true;
@@ -1642,9 +1643,9 @@ void sample_main(void) {
                     // Header
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    dataBuffer = G_io_apdu_buffer + OFFSET_LC;
+                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_LC;
                     uint32_t address_index;
-                    parse_uint32(&address_index, dataBuffer);
+                    parse_uint32(&address_index, operationContext.dataBuffer);
 
                     // Set BIP32 ADA path with address index
                     operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
@@ -1705,11 +1706,11 @@ void sample_main(void) {
 
                   uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                   uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                  dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+                  operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
                   uint32_t dataLength =
                       (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
                       (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
-                  dataBuffer += 4;
+                  operationContext.dataBuffer += 4;
 
                   // First APDU -
                   if (p1 == P1_FIRST) {
@@ -1721,19 +1722,16 @@ void sample_main(void) {
                       } else if (p2 != P2_SINGLE_TX) {
                           THROW(0x6B02);
                       }
-                      operationContext.transactionOffset = 0;
+                      operationContext.dataOffset = 0;
                       operationContext.fullMessageHash = false;
                   } else if (p1 != P1_NEXT) {
                       THROW(0x6B00);
                   }
 
-                  os_memmove(operationContext.message +
-                              operationContext.transactionOffset,
-                             dataBuffer, dataLength);
+                  // Other APDU Packets - Check buffers have space
+                  checkAndCopyDataToBuffer(dataLength);
 
-                  operationContext.transactionOffset += dataLength;
-
-                  if(operationContext.transactionOffset ==
+                  if(operationContext.dataOffset ==
                     operationContext.transactionLength
                   ) {
                       operationContext.fullMessageHash = true;
@@ -1786,16 +1784,16 @@ void sample_main(void) {
 
                     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
                     uint32_t dataLength =
                         (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
                         (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
-                    dataBuffer += 4;
+                    operationContext.dataBuffer += 4;
 
                     os_memset(address_pre_base64, G_io_apdu_buffer, 140);
                     os_memset(address_base58_encoded, 0, 140);
 
-                    os_memmove(address_pre_base64, dataBuffer, dataLength);
+                    os_memmove(address_pre_base64, operationContext.dataBuffer, dataLength);
 
                     unsigned char address_length = ada_encode_base58(address_pre_base64, dataLength,
                       address_base58_encoded, 140);
