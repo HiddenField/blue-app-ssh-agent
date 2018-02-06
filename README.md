@@ -28,100 +28,92 @@ To set up your environment on Mac, using [Vagrant](https://www.vagrantup.com) is
 1. Install [VirtualBox](https://www.virtualbox.org/) and [Vagrant](https://www.vagrantup.com/):
 
   ```bash
-  brew cask install virtualbox
-  # This is required for USB support
-  brew cask install virtualbox-extension-pack
-  brew cask install vagrant
-
+    brew cask install virtualbox
+    # This is required for USB support
+    brew cask install virtualbox-extension-pack
+    brew cask install vagrant
   ```
 
 2. Clone the [ledger-vagrant](https://github.com/fix/ledger-vagrant) project and bring up the vagrant machine:
 
-    ```bash
+  ```bash
     git clone git@github.com:fix/ledger-vagrant.git
     cd ledger-vagrant
     vagrant up
-    ```
+  ```
 3. Clone the application onto you machine
 
-    ```bash
+  ```bash
     # Where the application is cloned to is called LEDGER_CARDANO_HOME
     # For testers and developers we would advise you to clone straight into the Vagrant VM's app folder      
     git clone [CLONE_URL_OF_GIT_REPOSITORY]
-    ```
+  ```
 
 4. Copying your code into the VM is done via the `apps` directory which is synced in Vagrant:
 
 	```bash
-	cd ledger-vagrant
-	cp -r [LEDGER_CARDANO_HOME] ./apps/
+  	cd ledger-vagrant
+  	cp -r [LEDGER_CARDANO_HOME] ./apps/
 	```
 
 5. SSH into the Vagrant VM
 
 	```bash
-	# get the ID of the machine first
-	vagrant global-status
-	vagrant ssh <ID>
-  # You are now on the VM - note the prompt change
-  vagrant@vagrant-ubuntu-trusty-64:~$
+  	# get the ID of the machine first
+  	vagrant global-status
+  	vagrant ssh [ID]
+    # You are now on the VM - note the prompt change
+    vagrant@vagrant-ubuntu-trusty-64:~$
 	```
 
 6. Setup Custom CA - These commands are run inside the Vagrant VM (vagrant@vagrant-ubuntu-trusty-64:~$)
-
   To remove the user warnings when installing, running and deleting the app from the Ledger device, you need to generate a Custom CA keypair.
-
   ```bash
-  cd ~/apps/ledger-cardano-app
-  python -m ledgerblue.genCAPair
+    cd ~/apps/ledger-cardano-app
+    python -m ledgerblue.genCAPair
   ```
-
   This command will output the keypair onto the screen. Highlight the private key (after the colon) - Command + C
-
+  ```bash
+    Public key : 04180cf57eb2afc56ea26cc13a3a01839943a03b40d32110d401553a78a814b40b3c863f96e04f9a7710335fe920b3d0bec21529480341b381b21d7bc617b02160
+    Private key: d30b3e3d25dc84cec995d1163b21a970e32879a728eccf29fd455b9a70cbc3d1
   ```
-  Public key : 04180cf57eb2afc56ea26cc13a3a01839943a03b40d32110d401553a78a814b40b3c863f96e04f9a7710335fe920b3d0bec21529480341b381b21d7bc617b02160
-  Private key: d30b3e3d25dc84cec995d1163b21a970e32879a728eccf29fd455b9a70cbc3d1
-  ```
-
   Save private key into file sign.key in root directory
   ```bash
-  touch sign.key
-  echo [PASTE PRIVATE KEY] > sign.key
-  cat sign.key
-  # You should see the output of the private key
-  d30b3e3d25dc84cec995d1163b21a970e32879a728eccf29fd455b9a70cbc3d1
+    touch sign.key
+    echo [PASTE PRIVATE KEY] > sign.key
+    cat sign.key
+    # You should see the output of the private key
+    d30b3e3d25dc84cec995d1163b21a970e32879a728eccf29fd455b9a70cbc3d1
   ```
-
   Load public key onto Ledger device:
-
   ```bash
-  cd ~/apps/ledger-cardano-app
-  python -m ledgerblue.setupCustomCA --targetId 0x31100002 --public [PUBLIC KEY]  
+    cd ~/apps/ledger-cardano-app
+    python -m ledgerblue.setupCustomCA --targetId 0x31100002 --public [PUBLIC KEY]
   ```  
 
-7. To deploy, simply run:
+7. To deploy, simply run
 
 	```bash    
-	vagrant@vagrant-ubuntu-trusty-64:~$ cd apps/ledger-cardano-app
-  # Delete the current application if you are testing/building a different version
-  vagrant@vagrant-ubuntu-trusty-64:~$ make delete
-  # Build and load the application onto the Nano S
-	vagrant@vagrant-ubuntu-trusty-64:~$ make clean load
+  	cd apps/ledger-cardano-app
+    # Delete the current application if you are testing/building a different version
+    make delete
+    # Build and load the application onto the Nano S
+  	vagrant@vagrant-ubuntu-trusty-64:~$ make clean load
 	```
 8. To build test build and deploy:
 
   ```bash    
-  # Same as normal build above, but instead:
-  vagrant@vagrant-ubuntu-trusty-64:~$ make clean test
+    # Same as normal build above, but instead:
+    make clean test
   ```
 
 9. Shutdown VM - You must exit the VM in order for the host machine to regain visibility of the Ledger device.
 
   ```bash
-  vagrant@vagrant-ubuntu-trusty-64:~$ exit
-   ```
+    exit
+  ```
 
-#### Known Issues
+### Known Issues
 
 * At present, the Vagrant setup does not include adding the ARM toolchain to the path, which is required for compilation. This can be resolved by adding the following to `~/.bashrc`:
 
