@@ -1030,6 +1030,33 @@ void io_exchange_address() {
     G_io_apdu_buffer[tx++] = 0x00;
 
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+    ui_idle();
+}
+
+void io_exchange_set_tx() {
+    uint32_t tx = 0;
+    G_io_apdu_buffer[tx++] = operationContext.finalUTXOCount;
+
+    for (int i=0; i < operationContext.finalUTXOCount; i++ ) {
+
+        os_memmove(G_io_apdu_buffer + tx, &ui_addresses[i], MAX_CHAR_PER_ADDR -1 );
+        tx += MAX_CHAR_PER_ADDR - 1;
+        os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i], 8);
+        tx += 8;
+    }
+
+    G_io_apdu_buffer[tx++] = 0x90;
+    G_io_apdu_buffer[tx++] = 0x00;
+
+    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+}
+
+void io_exchange_signing_aborted() {
+    uint8_t tx = 0;
+    G_io_apdu_buffer[tx++] = 0x66;
+    G_io_apdu_buffer[tx++] = 0x66;
+    // Send back the response, do not restart the event loop
+    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 2);
     // Display back the original UX
     ui_idle();
 }
@@ -1047,7 +1074,12 @@ unsigned int abortSigningTxUI() {
     if(is_tx_set) {
         resetSigningTx();
 
-        UX_DISPLAY(bagl_ui_signing_aborted_nanos, NULL);
+        #ifdef HEADLESS
+            // Do not display aborted display
+            io_exchange_signing_aborted();
+        #else
+            UX_DISPLAY(bagl_ui_signing_aborted_nanos, NULL);
+        #endif
 
         return 1;
     }
@@ -1160,39 +1192,12 @@ unsigned int prepare_tx_preview_ui() {
 
 unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
 
-    uint32_t tx = 0;
-    //G_io_apdu_buffer[tx++] = operationContext.finalUTXOCount;
-    //G_io_apdu_buffer[tx++] = 0xFF;
-    /*
-    for (int i=0; i < operationContext.finalUTXOCount; i++ ) {
-        os_memmove(G_io_apdu_buffer + tx,
-          &operationContext.addressData[i], 4);
-        tx += 4;
-        G_io_apdu_buffer[tx++] = 0xFF;
-
-        //Using uint32_t example needs to double index for each address
-        //os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i*2], 8);
-
-        os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i], 8);
-        tx += 8;
-
-        //os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i+1], 4);
-        //tx += 4;
-
-        G_io_apdu_buffer[tx++] = 0xFF;
-    }
-    */
-    os_memmove(G_io_apdu_buffer + tx, operationContext.hashTX, 32);
-    tx += 32;
-
-    G_io_apdu_buffer[tx++] = 0x90;
-    G_io_apdu_buffer[tx++] = 0x00;
-    // Send back the response, do not restart the event loop
-    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-    // Display back the original UX
-
-    UX_DISPLAY(bagl_ui_signing_tx_nanos, NULL);
-    //ui_idle();
+    io_exchange_set_tx();
+    #ifdef HEADLESS
+        ui_idle();
+    #else
+        UX_DISPLAY(bagl_ui_signing_tx_nanos, NULL);
+    #endif
 
     return 0;
 }
@@ -1244,13 +1249,7 @@ unsigned int io_seproxyhal_touch_signing_completed(const bagl_element_t *e) {
 
 unsigned int io_seproxyhal_touch_signing_aborted(const bagl_element_t *e) {
 
-    uint8_t tx = 0;
-    G_io_apdu_buffer[tx++] = 0x66;
-    G_io_apdu_buffer[tx++] = 0x66;
-    // Send back the response, do not restart the event loop
-    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 2);
-    // Display back the original UX
-    ui_idle();
+    io_exchange_signing_aborted();
     return 0; // do not redraw the widget
 
 }
@@ -1359,11 +1358,11 @@ void sample_main(void) {
                                                         (operationContext.dataBuffer[3]);
                         if(operationContext.bip32Path[3] < HARDENED_BIP32) {
                             //TODO: Set error code
-                            THROW(0x5020);
+                            THROW(0x5201);
                         }
                     } else {
                         //TODO: Set error code
-                        THROW(0x5021);
+                        THROW(0x5202);
                     }
 
                     derive_bip32_node_private_key(privateKeyData);
@@ -1559,10 +1558,12 @@ void sample_main(void) {
 
                     if(operationContext.fullMessageHash) {
 
-                        UX_DISPLAY(bagl_ui_approval_preview_tx_nanos, NULL);
-                        flags |= IO_ASYNCH_REPLY;
-                        //os_memmove(G_io_apdu_buffer + tx, operationContext.hashTX, 32);
-                        //tx += 32;
+                        #ifdef HEADLESS
+                            io_exchange_set_tx();
+                        #else
+                            UX_DISPLAY(bagl_ui_approval_preview_tx_nanos, NULL);
+                            flags |= IO_ASYNCH_REPLY;
+                        #endif
 
                     } else {
                         uint32_t tx = 0;
@@ -1643,10 +1644,13 @@ void sample_main(void) {
                     tx_sign_counter--;
                     if(tx_sign_counter == 0 ) {
                         resetSigningTx();
-                        UX_DISPLAY(bagl_ui_signing_completed_nanos, NULL);
+                        #ifdef HEADLESS
+                            ui_idle();
+                        #else
+                            UX_DISPLAY(bagl_ui_signing_completed_nanos, NULL);
+                            flags |= IO_ASYNCH_REPLY;
+                        #endif
                     }
-
-                    //ui_idle();
 
                 }
                 break;
