@@ -49,7 +49,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define MAX_BIP32_PATH 10
 #define MAX_USER_NAME 20
 #define MAX_CHUNK_SIZE 55
-#define MAX_MSG 1023
+#define MAX_TX_SIZE 1023
 #define MAX_TX_OUTPUTS 4
 #define MAX_CHAR_PER_ADDR 13
 #define MAX_ADDR_OUT_LENGTH 200
@@ -65,7 +65,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define INS_GET_PUBLIC_KEY 0x02
 #define INS_SET_TX 0x05
 #define INS_SIGN_TX 0x06
-#define INS_HASH_TEST_TEST 0x04
+#define INS_HASH_TEST 0x04
 #define INS_BASE58_ENCODE_TEST 0x08
 #define INS_CBOR_DECODE_TEST 0x09
 
@@ -106,7 +106,7 @@ typedef struct operationContext_t {
     bool fullMessageHash;
     bool getWalletRecoveryPassphrase;
     bool usePassedInIndex;
-    uint8_t message[MAX_MSG];
+    uint8_t message[MAX_TX_SIZE];
     uint32_t messageLength;
     uint64_t transactionLength;
     uint32_t transactionOffset;
@@ -1040,7 +1040,7 @@ void parse_uint32(uint32_t *value, uint8_t *data) {
 
 void resetSigningTx() {
     tx_ui_t.tx_ui_step = -1;
-    os_memset(operationContext.message, 0, MAX_MSG);
+    os_memset(operationContext.message, 0, MAX_TX_SIZE);
     operationContext.messageLength = 0;
     operationContext.transactionLength = 0;
     os_memset(operationContext.hashTX, 0, 32);
@@ -1455,12 +1455,18 @@ void sample_main(void) {
                         THROW(0x6B00);
                     }
 
-                    os_memmove(operationContext.message +
+                    // Other APDU Packets - Check buffers have space
+                    if(operationContext.transactionOffset + dataLength > MAX_TX_SIZE)
+                    {
+                        THROW(0x5001);
+                    } else {
+                        os_memmove(operationContext.message +
                                 operationContext.transactionOffset,
-                               dataBuffer, dataLength);
+                                dataBuffer, dataLength);
+                        operationContext.transactionOffset += dataLength;
+                    }
 
-                    operationContext.transactionOffset += dataLength;
-
+                    // Check message complete
                     if(operationContext.transactionOffset ==
                       operationContext.transactionLength
                     ) {
