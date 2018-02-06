@@ -708,8 +708,19 @@ const bagl_element_t ui_address_nanos[] = {
      NULL},
 };
 unsigned int ui_address_nanos_button(unsigned int button_mask,
-                                     unsigned int button_mask_counter);
+                                    unsigned int button_mask_counter) {
+   switch (button_mask) {
+       case BUTTON_EVT_RELEASED | BUTTON_LEFT: // CANCEL
+           io_seproxyhal_touch_address_cancel(NULL);
+           break;
 
+       case BUTTON_EVT_RELEASED | BUTTON_RIGHT: { // OK
+           io_seproxyhal_touch_address_ok(NULL);
+           break;
+       }
+   }
+   return 0;
+}
 
 
 void ui_idle(void) {
@@ -1001,6 +1012,28 @@ void checkAndCopyDataToBuffer(uint8_t dataLengthIn) {
     }
 }
 
+void io_exchange_address() {
+    uint32_t tx = 0;
+    G_io_apdu_buffer[tx++] = 65; // + sizeof(operationContext.chainCode);
+    os_memmove(G_io_apdu_buffer + tx, operationContext.publicKey.W, 65);
+    tx += 65;
+
+    if(operationContext.getWalletRecoveryPassphrase) {
+        // output chain code
+        os_memmove(G_io_apdu_buffer + tx,
+                   operationContext.chainCode,
+                   sizeof(operationContext.chainCode));
+        tx += sizeof(operationContext.chainCode);
+    }
+
+    G_io_apdu_buffer[tx++] = 0x90;
+    G_io_apdu_buffer[tx++] = 0x00;
+
+    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+    // Display back the original UX
+    ui_idle();
+}
+
 void resetSigningTx() {
     tx_ui_t.tx_ui_step = -1;
     os_memset(operationContext.message, 0, MAX_TX_SIZE);
@@ -1184,25 +1217,10 @@ unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e) {
 }
 
 unsigned int io_seproxyhal_touch_address_ok(const bagl_element_t *e) {
-    uint32_t tx = 0;
-    G_io_apdu_buffer[tx++] = 65; // + sizeof(operationContext.chainCode);
-    os_memmove(G_io_apdu_buffer + tx, operationContext.publicKey.W, 65);
-    tx += 65;
 
-    if(operationContext.getWalletRecoveryPassphrase) {
-        // output chain code
-        os_memmove(G_io_apdu_buffer + tx,
-                   operationContext.chainCode,
-                   sizeof(operationContext.chainCode));
-        tx += sizeof(operationContext.chainCode);
-    }
-
-    G_io_apdu_buffer[tx++] = 0x90;
-    G_io_apdu_buffer[tx++] = 0x00;
     // Send back the response, do not restart the event loop
-    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-    // Display back the original UX
-    ui_idle();
+    io_exchange_address();
+
     return 0; // do not redraw the widget
 }
 
@@ -1237,20 +1255,7 @@ unsigned int io_seproxyhal_touch_signing_aborted(const bagl_element_t *e) {
 
 }
 
-unsigned int ui_address_nanos_button(unsigned int button_mask,
-                                     unsigned int button_mask_counter) {
-    switch (button_mask) {
-        case BUTTON_EVT_RELEASED | BUTTON_LEFT: // CANCEL
-            io_seproxyhal_touch_address_cancel(NULL);
-            break;
 
-        case BUTTON_EVT_RELEASED | BUTTON_RIGHT: { // OK
-            io_seproxyhal_touch_address_ok(NULL);
-            break;
-        }
-    }
-    return 0;
-}
 
 unsigned short io_exchange_al(unsigned char channel, unsigned short tx_len) {
     switch (channel & ~(IO_FLAGS)) {
@@ -1381,8 +1386,13 @@ void sample_main(void) {
                     os_memset(&privateKey, 0, sizeof(privateKey));
                     os_memset(privateKeyData, 0, sizeof(privateKeyData));
 
-                    UX_DISPLAY(ui_address_nanos, NULL);
-                    flags |= IO_ASYNCH_REPLY;
+                    #ifdef HEADLESS
+                        io_exchange_address();
+                    #else
+                        UX_DISPLAY(ui_address_nanos, NULL);
+                        flags |= IO_ASYNCH_REPLY;
+                    #endif
+
                 }
 
                 break;
