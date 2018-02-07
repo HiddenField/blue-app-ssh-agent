@@ -100,6 +100,8 @@ unsigned int ux_step_count;
 ux_state_t ux;
 
 typedef struct operationContext_t {
+    uint8_t p1;
+    uint8_t p2;
     uint8_t *dataBuffer;
     uint32_t dataOffset;
     uint32_t dataLength;
@@ -1014,19 +1016,28 @@ void checkAndCopyDataToBuffer() {
     }
 }
 
-void readDataFromMultiAPDU(uint8_t p1In, uint8_t p2In) {
+void readHeaderFromAPDU() {
+    operationContext.p1 = G_io_apdu_buffer[OFFSET_P1];
+    operationContext.p2 = G_io_apdu_buffer[OFFSET_P2];
+    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+    operationContext.dataLength =
+        (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
+        (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
+}
+
+void readDataFromMultiAPDU() {
     // First APDU -
-    if (p1In == P1_FIRST) {
+    if (operationContext.p1 == P1_FIRST) {
         // First APDU contains total transaction length
         operationContext.transactionLength = operationContext.dataLength;
 
-        if (p2In == P2_MULTI_TX) {
+        if (operationContext.p2 == P2_MULTI_TX) {
             operationContext.dataLength = MAX_CHUNK_SIZE;
         }
 
         operationContext.dataOffset = 0;
         operationContext.isDataReadComplete = false;
-    } else if (p1In != P1_NEXT) {
+    } else if (operationContext.p1 != P1_NEXT) {
         THROW(0x5401);
     }
 
@@ -1380,11 +1391,11 @@ void sample_main(void) {
                 #ifdef INS_GET_PUBLIC_KEY_FUNC
                 case INS_GET_PUBLIC_KEY: {
 
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
+                    operationContext.p1 = G_io_apdu_buffer[OFFSET_P1];
+                    operationContext.p2 = G_io_apdu_buffer[OFFSET_P2];
                     operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
 
-                    if(p1 == P1_RECOVERY_PASSPHRASE) {
+                    if(operationContext.p1 == P1_RECOVERY_PASSPHRASE) {
                         operationContext.getWalletRecoveryPassphrase = true;
                         operationContext.pathLength = ADA_ROOT_BIP32_PATH_LEN;
 
@@ -1393,7 +1404,7 @@ void sample_main(void) {
                         operationContext.bip32Path[1] = ADA_COIN_TYPE |
                                                           HARDENED_BIP32;
 
-                    } else if (p1 == P1_ADDRESS_PUB_KEY) {
+                    } else if (operationContext.p1 == P1_ADDRESS_PUB_KEY) {
                         operationContext.getWalletRecoveryPassphrase = false;
                         operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
 
@@ -1454,15 +1465,9 @@ void sample_main(void) {
                 #ifdef INS_BLAKE2B_TEST_FUNC
                 case INS_BLAKE2B_TEST: {
 
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    operationContext.dataLength =
-                        (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
-                        (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
-                    operationContext.dataBuffer += 4;
+                    readHeaderFromAPDU();
 
-                    readDataFromMultiAPDU(p1, p2);
+                    readDataFromMultiAPDU();
 
                     if(operationContext.isDataReadComplete) {
 
@@ -1498,15 +1503,9 @@ void sample_main(void) {
                 #ifdef INS_SET_TX_FUNC
                 case INS_SET_TX: {
 
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    operationContext.dataLength =
-                        (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
-                        (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
+                    readHeaderFromAPDU();
 
-
-                    readDataFromMultiAPDU(p1, p2);
+                    readDataFromMultiAPDU();
 
                     if(operationContext.isDataReadComplete) {
 
@@ -1555,9 +1554,8 @@ void sample_main(void) {
                     // TODO: Check passed in hash equals Tx and Address Index Hash
 
                     // Header
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_LC;
+                    readHeaderFromAPDU();
+
                     uint32_t address_index;
                     parse_uint32(&address_index, operationContext.dataBuffer);
 
@@ -1621,15 +1619,9 @@ void sample_main(void) {
                 #ifdef INS_CBOR_DECODE_TEST_FUNC
                 case INS_CBOR_DECODE_TEST: {
 
-                  uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                  uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                  operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                  operationContext.dataLength =
-                      (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
-                      (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
-                  operationContext.dataBuffer += 4;
+                  readHeaderFromAPDU();
 
-                  readDataFromMultiAPDU(p1, p2);
+                  readDataFromMultiAPDU();
 
                   if(operationContext.isDataReadComplete) {
                       parse_cbor_transaction();
@@ -1676,13 +1668,7 @@ void sample_main(void) {
                 #ifdef INS_BASE58_ENCODE_TEST_FUNC
                 case INS_BASE58_ENCODE_TEST: {
 
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    operationContext.dataLength =
-                        (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
-                        (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
-                    operationContext.dataBuffer += 4;
+                    readHeaderFromAPDU();
 
                     os_memset(address_pre_base58, G_io_apdu_buffer, 140);
                     os_memset(address_base58_encoded, 0, 140);
