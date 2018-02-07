@@ -48,7 +48,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 
 #define MAX_BIP32_PATH 10
 #define MAX_USER_NAME 20
-#define MAX_CHUNK_SIZE 55
+#define MAX_CHUNK_SIZE 56
 #define MAX_TX_SIZE 1023
 #define MAX_TX_OUTPUTS 4
 #define MAX_CHAR_PER_ADDR 13
@@ -81,7 +81,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define OFFSET_P1 2
 #define OFFSET_P2 3
 #define OFFSET_LC 4
-#define OFFSET_CDATA 5
+#define OFFSET_CDATA 8
 
 #define CBOR_7              0xE0  /* type 7 (float and other types) */
 #define CBOR_ARRAY          0x80  /* type 4 */
@@ -1502,9 +1502,9 @@ void sample_main(void) {
                     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
                     operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
                     operationContext.dataLength =
-                        (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
-                        (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
-                    operationContext.dataBuffer += 4;
+                        (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
+                        (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
+
 
                     readDataFromMultiAPDU(p1, p2);
 
