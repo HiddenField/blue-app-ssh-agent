@@ -88,7 +88,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define CBOR_VAR_FOLLOWS    31    /* 0x1f */
 #define CBOR_BREAK      (CBOR_7 | 31)
 
-unsigned char address_pre_base64[140];
+unsigned char address_pre_base58[140];
 unsigned char address_base58_encoded[MAX_ADDR_OUT_LENGTH];
 
 unsigned char G_io_seproxyhal_spi_buffer[IO_SEPROXYHAL_BUFFER_SIZE_B];
@@ -1684,12 +1684,12 @@ void sample_main(void) {
                         (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
                     operationContext.dataBuffer += 4;
 
-                    os_memset(address_pre_base64, G_io_apdu_buffer, 140);
+                    os_memset(address_pre_base58, G_io_apdu_buffer, 140);
                     os_memset(address_base58_encoded, 0, 140);
 
-                    os_memmove(address_pre_base64, operationContext.dataBuffer, operationContext.dataLength);
+                    os_memmove(address_pre_base58, operationContext.dataBuffer, operationContext.dataLength);
 
-                    unsigned char address_length = ada_encode_base58(address_pre_base64, operationContext.dataLength,
+                    unsigned char address_length = ada_encode_base58(address_pre_base58, operationContext.dataLength,
                       address_base58_encoded, 140);
 
                     // Display Address
