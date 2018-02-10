@@ -62,10 +62,10 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define HARDENED_BIP32 0x80000000
 
 #define CLA 0x80
-#define INS_GET_PUBLIC_KEY 0x02
-#define INS_SET_TX 0x05
-#define INS_SIGN_TX 0x06
-#define INS_BLAKE2B_TEST 0x04
+#define INS_GET_PUBLIC_KEY 0x01
+#define INS_SET_TX 0x02
+#define INS_SIGN_TX 0x03
+#define INS_BLAKE2B_TEST 0x07
 #define INS_BASE58_ENCODE_TEST 0x08
 #define INS_CBOR_DECODE_TEST 0x09
 

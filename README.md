@@ -88,7 +88,7 @@ To set up your environment on Mac, using [Vagrant](https://www.vagrantup.com) is
   Load public key onto Ledger device:
   ```bash
     cd ~/apps/ledger-cardano-app
-    python -m ledgerblue.setupCustomCA --targetId 0x31100002 --public [PUBLIC KEY]
+    python -m ledgerblue.setupCustomCA --targetId 0x31100002 --name HiddenField --public [PUBLIC KEY]
   ```  
 
 7. To deploy, simply run
