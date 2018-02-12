@@ -50,7 +50,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define MAX_USER_NAME 20
 #define MAX_CHUNK_SIZE 56
 #define MAX_TX_SIZE 1023
-#define MAX_TX_OUTPUTS 4
+#define MAX_TX_OUTPUTS 6
 #define MAX_CHAR_PER_ADDR 13
 #define MAX_ADDR_OUT_LENGTH 200
 
@@ -797,6 +797,9 @@ void parse_cbor_transaction() {
       offset ++;
 
       while(!cbor_at_break(operationContext.message, offset) && !error) {
+          if(otx_index >= MAX_TX_OUTPUTS) {
+              THROW(0x5905);
+          }
           // Skip tag
           offset += 4;
           if(operationContext.message[offset] == 0x58) {
