@@ -48,7 +48,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 
 #define MAX_BIP32_PATH 10
 #define MAX_USER_NAME 20
-#define MAX_CHUNK_SIZE 55
+#define MAX_CHUNK_SIZE 56
 #define MAX_TX_SIZE 1023
 #define MAX_TX_OUTPUTS 4
 #define MAX_CHAR_PER_ADDR 13
@@ -62,10 +62,10 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define HARDENED_BIP32 0x80000000
 
 #define CLA 0x80
-#define INS_GET_PUBLIC_KEY 0x02
-#define INS_SET_TX 0x05
-#define INS_SIGN_TX 0x06
-#define INS_HASH_TEST 0x04
+#define INS_GET_PUBLIC_KEY 0x01
+#define INS_SET_TX 0x02
+#define INS_SIGN_TX 0x03
+#define INS_BLAKE2B_TEST 0x07
 #define INS_BASE58_ENCODE_TEST 0x08
 #define INS_CBOR_DECODE_TEST 0x09
 
@@ -81,14 +81,14 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define OFFSET_P1 2
 #define OFFSET_P2 3
 #define OFFSET_LC 4
-#define OFFSET_CDATA 5
+#define OFFSET_CDATA 8
 
 #define CBOR_7              0xE0  /* type 7 (float and other types) */
 #define CBOR_ARRAY          0x80  /* type 4 */
 #define CBOR_VAR_FOLLOWS    31    /* 0x1f */
 #define CBOR_BREAK      (CBOR_7 | 31)
 
-unsigned char address_pre_base64[140];
+unsigned char address_pre_base58[140];
 unsigned char address_base58_encoded[MAX_ADDR_OUT_LENGTH];
 
 unsigned char G_io_seproxyhal_spi_buffer[IO_SEPROXYHAL_BUFFER_SIZE_B];
@@ -100,14 +100,17 @@ unsigned int ux_step_count;
 ux_state_t ux;
 
 typedef struct operationContext_t {
+    uint8_t p1;
+    uint8_t p2;
     uint8_t *dataBuffer;
     uint32_t dataOffset;
+    uint32_t dataLength;
     uint8_t pathLength;
     uint32_t bip32Path[MAX_BIP32_PATH];
     cx_ecfp_public_key_t publicKey;
     unsigned char chainCode[32];
     bool direct;
-    bool fullMessageHash;
+    bool isDataReadComplete;
     bool getWalletRecoveryPassphrase;
     bool usePassedInIndex;
     uint8_t message[MAX_TX_SIZE];
@@ -1000,17 +1003,75 @@ void parse_uint32(uint32_t *value, uint8_t *data) {
  * Copies data to buffer is within range.
  * Throws: 5001 if buffer is exceeded.
  */
-void checkAndCopyDataToBuffer(uint8_t dataLengthIn) {
-    if(operationContext.dataOffset + dataLengthIn > (MAX_TX_SIZE + 1))
+void checkAndCopyDataToBuffer() {
+    if(operationContext.dataOffset + operationContext.dataLength > (MAX_TX_SIZE + 1))
     {
         THROW(0x5001);
     } else {
         os_memmove(operationContext.message +
                 operationContext.dataOffset,
-                operationContext.dataBuffer, dataLengthIn);
-        operationContext.dataOffset += dataLengthIn;
+                operationContext.dataBuffer,
+                operationContext.dataLength);
+        operationContext.dataOffset += operationContext.dataLength;
     }
 }
+
+void readHeaderFromAPDU() {
+    operationContext.p1 = G_io_apdu_buffer[OFFSET_P1];
+    operationContext.p2 = G_io_apdu_buffer[OFFSET_P2];
+    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+    operationContext.dataLength =
+        (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
+        (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
+}
+
+void readDataFromMultiAPDU() {
+    // First APDU -
+    if (operationContext.p1 == P1_FIRST) {
+        // First APDU contains total transaction length
+        operationContext.transactionLength = operationContext.dataLength;
+
+        if (operationContext.p2 == P2_MULTI_TX) {
+            operationContext.dataLength = MAX_CHUNK_SIZE;
+        }
+
+        operationContext.dataOffset = 0;
+        operationContext.isDataReadComplete = false;
+    } else if (operationContext.p1 != P1_NEXT) {
+        THROW(0x5401);
+    }
+
+    // Other APDU Packets - Check buffers have space
+    checkAndCopyDataToBuffer();
+
+    // Check if we have read all the data for this instuction
+    if(operationContext.dataOffset ==
+      operationContext.transactionLength
+    ) {
+        operationContext.isDataReadComplete = true;
+    }
+}
+
+void hashDataWithBlake2b() {
+    int error = blake2b( operationContext.hashTX,
+             32,
+             operationContext.message,
+             operationContext.transactionLength,
+             NULL,
+             0 );
+    if(error == -1) {
+        THROW(0x5402);
+    } else if (error == -2) {
+        THROW(0x5403);
+    } else if (error == -3) {
+        THROW(0x5404);
+    } else if (error == -4) {
+        THROW(0x5405);
+    } else if(error != 0) {
+        THROW(0x5406);
+    }
+}
+
 
 void io_exchange_address() {
     uint32_t tx = 0;
@@ -1054,8 +1115,8 @@ void io_exchange_set_tx() {
 
 void io_exchange_signing_aborted() {
     uint8_t tx = 0;
-    G_io_apdu_buffer[tx++] = 0x66;
-    G_io_apdu_buffer[tx++] = 0x66;
+    G_io_apdu_buffer[tx++] = 0x500F;
+    G_io_apdu_buffer[tx++] = 0x500F;
     // Send back the response, do not restart the event loop
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 2);
     // Display back the original UX
@@ -1213,7 +1274,7 @@ unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e) {
     G_io_apdu_buffer[tx++] = 0x00;
 
     G_io_apdu_buffer[tx++] = 0x90;
-    G_io_apdu_buffer[tx++] = 0x00;
+    G_io_apdu_buffer[tx++] = 0x01;
     // Send back the response, do not restart the event loop
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
     // Display back the original UX
@@ -1231,8 +1292,8 @@ unsigned int io_seproxyhal_touch_address_ok(const bagl_element_t *e) {
 }
 
 unsigned int io_seproxyhal_touch_address_cancel(const bagl_element_t *e) {
-    G_io_apdu_buffer[0] = 0x69;
-    G_io_apdu_buffer[1] = 0x85;
+    G_io_apdu_buffer[0] = 0x90;
+    G_io_apdu_buffer[1] = 0x01;
     // Send back the response, do not restart the event loop
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 2);
     // Display back the original UX
@@ -1321,7 +1382,7 @@ void sample_main(void) {
                 if (G_io_apdu_buffer[1] != INS_SIGN_TX &&
                     abortSigningTxUI()) {
                         flags |= IO_ASYNCH_REPLY;
-                        THROW(0x6666);
+                        THROW(0x500F);
                 }
 
 
@@ -1330,11 +1391,11 @@ void sample_main(void) {
                 #ifdef INS_GET_PUBLIC_KEY_FUNC
                 case INS_GET_PUBLIC_KEY: {
 
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
+                    operationContext.p1 = G_io_apdu_buffer[OFFSET_P1];
+                    operationContext.p2 = G_io_apdu_buffer[OFFSET_P2];
                     operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
 
-                    if(p1 == P1_RECOVERY_PASSPHRASE) {
+                    if(operationContext.p1 == P1_RECOVERY_PASSPHRASE) {
                         operationContext.getWalletRecoveryPassphrase = true;
                         operationContext.pathLength = ADA_ROOT_BIP32_PATH_LEN;
 
@@ -1343,7 +1404,7 @@ void sample_main(void) {
                         operationContext.bip32Path[1] = ADA_COIN_TYPE |
                                                           HARDENED_BIP32;
 
-                    } else if (p1 == P1_ADDRESS_PUB_KEY) {
+                    } else if (operationContext.p1 == P1_ADDRESS_PUB_KEY) {
                         operationContext.getWalletRecoveryPassphrase = false;
                         operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
 
@@ -1401,72 +1462,21 @@ void sample_main(void) {
 
 
 
-                #ifdef INS_HASH_TEST_FUNC
-                case INS_HASH_TEST: {
+                #ifdef INS_BLAKE2B_TEST_FUNC
+                case INS_BLAKE2B_TEST: {
 
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    uint32_t dataLength =
-                        (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
-                        (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
-                    operationContext.dataBuffer += 4;
+                    readHeaderFromAPDU();
 
-                    // First APDU -
-                    if (p1 == P1_FIRST) {
-                        // First APDU contains total transaction length
-                        operationContext.transactionLength = dataLength;
+                    readDataFromMultiAPDU();
 
-                        if (p2 == P2_MULTI_TX) {
-                            dataLength = MAX_CHUNK_SIZE;
-                        }
+                    if(operationContext.isDataReadComplete) {
 
-                        operationContext.dataOffset = 0;
-                        operationContext.fullMessageHash = false;
-                    } else if (p1 != P1_NEXT) {
-                        THROW(0x6B00);
-                    }
-
-                    // Other APDU Packets - Check buffers have space
-                    checkAndCopyDataToBuffer(dataLength);
-
-
-                    // Check message complete
-                    if(operationContext.dataOffset ==
-                      operationContext.transactionLength
-                    ) {
-                        operationContext.fullMessageHash = true;
-                    }
-
-
-                    if(operationContext.fullMessageHash) {
-
-                        int error = blake2b( operationContext.hashTX,
-                                 32,
-                                 operationContext.message,
-                                 //testTX,
-                                 operationContext.transactionLength,
-                                 //20,
-                                 NULL,
-                                 0 );
-                        if(error == 0) {
-                            //THROW(0x6BAA);
-                        } else if (error == -1) {
-                            THROW(0x6BBB);
-                        } else if (error == -2) {
-                            THROW(0x6BCC);
-                        } else if (error == -3) {
-                            THROW(0x6BDD);
-                        } else if (error == -4) {
-                            THROW(0x6BEE);
-                        } else {
-                            THROW(0x6BFF);
-                        }
+                        hashDataWithBlake2b();
 
                     }
 
                     uint32_t tx = 0;
-                    if(operationContext.fullMessageHash) {
+                    if(operationContext.isDataReadComplete) {
                         G_io_apdu_buffer[tx++] = 0x20;
                         os_memmove(G_io_apdu_buffer + tx, operationContext.hashTX, 32);
                         tx += 32;
@@ -1481,7 +1491,7 @@ void sample_main(void) {
                 }
 
                 break;
-                #endif //INS_HASH_TEST_FUNC
+                #endif //INS_BLAKE2B_TEST_FUNC
 
 
 
@@ -1493,71 +1503,17 @@ void sample_main(void) {
                 #ifdef INS_SET_TX_FUNC
                 case INS_SET_TX: {
 
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    uint32_t dataLength =
-                        (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
-                        (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
-                    operationContext.dataBuffer += 4;
+                    readHeaderFromAPDU();
 
-                    // First APDU -
-                    if (p1 == P1_FIRST) {
-                        // First APDU contains total transaction length
-                        operationContext.transactionLength = dataLength;
+                    readDataFromMultiAPDU();
 
-                        if(p2 == P2_MULTI_TX) {
-                            dataLength = MAX_CHUNK_SIZE;
-                        } else if (p2 != P2_SINGLE_TX) {
-                            THROW(0x6B02);
-                        }
-                        operationContext.dataOffset = 0;
-                        operationContext.fullMessageHash = false;
-                    } else if (p1 != P1_NEXT) {
-                        THROW(0x6B00);
-                    }
+                    if(operationContext.isDataReadComplete) {
 
-                    // Other APDU Packets - Check buffers have space
-                    checkAndCopyDataToBuffer(dataLength);
-
-                    if(operationContext.dataOffset ==
-                      operationContext.transactionLength
-                    ) {
-                        operationContext.fullMessageHash = true;
-                    }
-
-
-                    if(operationContext.fullMessageHash) {
                         parse_cbor_transaction();
 
-                        int error = blake2b( operationContext.hashTX,
-                                 32,
-                                 operationContext.message,
-                                 //testTX,
-                                 operationContext.transactionLength,
-                                 //20,
-                                 NULL,
-                                 0 );
-                        if(error == 0) {
-                            //THROW(0x6BAA);
-                        } else if (error == -1) {
-                            THROW(0x6BBB);
-                        } else if (error == -2) {
-                            THROW(0x6BCC);
-                        } else if (error == -3) {
-                            THROW(0x6BDD);
-                        } else if (error == -4) {
-                            THROW(0x6BEE);
-                        } else {
-                            THROW(0x6BFF);
-                        }
+                        hashDataWithBlake2b();
 
                         is_tx_set = true;
-                    }
-
-
-
-                    if(operationContext.fullMessageHash) {
 
                         #ifdef HEADLESS
                             io_exchange_set_tx();
@@ -1592,15 +1548,14 @@ void sample_main(void) {
                         // Reset signing transaction
                         resetSigningTx();
                         // Expecting Tx has been set
-                        THROW(0x6666);
+                        THROW(0x500F);
                     }
 
                     // TODO: Check passed in hash equals Tx and Address Index Hash
 
                     // Header
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_LC;
+                    readHeaderFromAPDU();
+
                     uint32_t address_index;
                     parse_uint32(&address_index, operationContext.dataBuffer);
 
@@ -1664,46 +1619,17 @@ void sample_main(void) {
                 #ifdef INS_CBOR_DECODE_TEST_FUNC
                 case INS_CBOR_DECODE_TEST: {
 
-                  uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                  uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                  operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                  uint32_t dataLength =
-                      (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
-                      (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
-                  operationContext.dataBuffer += 4;
+                  readHeaderFromAPDU();
 
-                  // First APDU -
-                  if (p1 == P1_FIRST) {
-                      // First APDU contains total transaction length
-                      operationContext.transactionLength = dataLength;
+                  readDataFromMultiAPDU();
 
-                      if(p2 == P2_MULTI_TX) {
-                          dataLength = MAX_CHUNK_SIZE;
-                      } else if (p2 != P2_SINGLE_TX) {
-                          THROW(0x6B02);
-                      }
-                      operationContext.dataOffset = 0;
-                      operationContext.fullMessageHash = false;
-                  } else if (p1 != P1_NEXT) {
-                      THROW(0x6B00);
-                  }
-
-                  // Other APDU Packets - Check buffers have space
-                  checkAndCopyDataToBuffer(dataLength);
-
-                  if(operationContext.dataOffset ==
-                    operationContext.transactionLength
-                  ) {
-                      operationContext.fullMessageHash = true;
-                  }
-
-                  if(operationContext.fullMessageHash) {
+                  if(operationContext.isDataReadComplete) {
                       parse_cbor_transaction();
                   }
 
                   uint32_t tx = 0;
 
-                  if(operationContext.fullMessageHash) {
+                  if(operationContext.isDataReadComplete) {
 
                       // Output total Tx inputs
                       G_io_apdu_buffer[tx++] = tx_sign_counter;
@@ -1742,20 +1668,14 @@ void sample_main(void) {
                 #ifdef INS_BASE58_ENCODE_TEST_FUNC
                 case INS_BASE58_ENCODE_TEST: {
 
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    uint32_t dataLength =
-                        (G_io_apdu_buffer[5] << 24) | (G_io_apdu_buffer[6] << 16) |
-                        (G_io_apdu_buffer[7] << 8) | (G_io_apdu_buffer[8]);
-                    operationContext.dataBuffer += 4;
+                    readHeaderFromAPDU();
 
-                    os_memset(address_pre_base64, G_io_apdu_buffer, 140);
+                    os_memset(address_pre_base58, G_io_apdu_buffer, 140);
                     os_memset(address_base58_encoded, 0, 140);
 
-                    os_memmove(address_pre_base64, operationContext.dataBuffer, dataLength);
+                    os_memmove(address_pre_base58, operationContext.dataBuffer, operationContext.dataLength);
 
-                    unsigned char address_length = ada_encode_base58(address_pre_base64, dataLength,
+                    unsigned char address_length = ada_encode_base58(address_pre_base58, operationContext.dataLength,
                       address_base58_encoded, 140);
 
                     // Display Address
