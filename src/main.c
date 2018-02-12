@@ -785,6 +785,9 @@ void parse_cbor_transaction() {
           itx_count++;
       }
       offset++;
+      if(itx_count < 1) {
+          THROW(0x5902);
+      }
   } else {
       // Invalid TX, must have at least one input
       error = true;
@@ -871,8 +874,11 @@ void parse_cbor_transaction() {
               THROW(0x5903);
           }
       }
+      if(otx_index < 1) {
+          THROW(0x5904);
+      }
   } else {
-      // Invalid TX, must have at least one output
+      // Invalid TX, missing Outputs array
       error = true;
       THROW(0x5904);
   }
