@@ -50,7 +50,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define MAX_USER_NAME 20
 #define MAX_CHUNK_SIZE 56
 #define MAX_TX_SIZE 1023
-#define MAX_TX_OUTPUTS 6
+#define MAX_TX_IO 6
 #define MAX_CHAR_PER_ADDR 13
 #define MAX_ADDR_OUT_LENGTH 200
 
@@ -116,7 +116,7 @@ typedef struct operationContext_t {
     uint8_t message[MAX_TX_SIZE];
     uint64_t transactionLength;
     uint8_t finalUTXOCount;
-    uint64_t txAmountData[MAX_TX_OUTPUTS];
+    uint64_t txAmountData[MAX_TX_IO];
     uint8_t hashTX[32];
     #ifdef INS_CBOR_DECODE_TEST_FUNC
     uint32_t addressData[16];
@@ -124,7 +124,7 @@ typedef struct operationContext_t {
 } operationContext_t;
 
 
-char *ui_addresses[MAX_TX_OUTPUTS][MAX_CHAR_PER_ADDR];
+char *ui_addresses[MAX_TX_IO][MAX_CHAR_PER_ADDR];
 char *ui_address_ptr;
 uint8_t raw_address_length;
 uint8_t base58_address_length;
@@ -768,7 +768,9 @@ void parse_cbor_transaction() {
   if(cbor_deserialize_array_indefinite(operationContext.message, offset) ) {
       offset++;
       while(!cbor_at_break(operationContext.message, offset) && !error) {
-          itx_count++;
+          if(itx_count >= MAX_TX_IO) {
+              THROW(0x5905);
+          }
           // Skip tag
           offset += 4;
           if(operationContext.message[offset] == 0x58) {
@@ -780,6 +782,7 @@ void parse_cbor_transaction() {
 
               THROW(0x5901);
           }
+          itx_count++;
       }
       offset++;
   } else {
@@ -797,8 +800,8 @@ void parse_cbor_transaction() {
       offset ++;
 
       while(!cbor_at_break(operationContext.message, offset) && !error) {
-          if(otx_index >= MAX_TX_OUTPUTS) {
-              THROW(0x5905);
+          if(otx_index >= MAX_TX_IO) {
+              THROW(0x5906);
           }
           // Skip tag
           offset += 4;
