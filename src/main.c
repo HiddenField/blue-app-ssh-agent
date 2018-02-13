@@ -52,7 +52,8 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define MAX_TX_SIZE 1023
 #define MAX_TX_IO 6
 #define MAX_CHAR_PER_ADDR 13
-#define MAX_ADDR_OUT_LENGTH 200
+#define MAX_ADDR_OUT_LENGTH 170
+#define MAX_ADDR_IN_LENGTH 124
 
 #define ADA_ROOT_BIP32_PATH_LEN 0x02
 #define ADA_ADDR_BIP32_PATH_LEN 0x04
@@ -88,8 +89,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define CBOR_VAR_FOLLOWS    31    /* 0x1f */
 #define CBOR_BREAK      (CBOR_7 | 31)
 
-unsigned char address_pre_base58[140];
-unsigned char address_base58_encoded[MAX_ADDR_OUT_LENGTH];
+
 
 unsigned char G_io_seproxyhal_spi_buffer[IO_SEPROXYHAL_BUFFER_SIZE_B];
 
@@ -106,13 +106,12 @@ typedef struct operationContext_t {
     uint32_t dataOffset;
     uint32_t dataLength;
     uint8_t pathLength;
+    unsigned char address_base58[MAX_ADDR_OUT_LENGTH];
     uint32_t bip32Path[MAX_BIP32_PATH];
     cx_ecfp_public_key_t publicKey;
     unsigned char chainCode[32];
-    bool direct;
     bool isDataReadComplete;
     bool getWalletRecoveryPassphrase;
-    bool usePassedInIndex;
     uint8_t message[MAX_TX_SIZE];
     uint64_t transactionLength;
     uint8_t finalUTXOCount;
@@ -832,21 +831,21 @@ void parse_cbor_transaction() {
               // Base58 Encode Address
               raw_address_length = array_length + 10;
 
-              os_memset(address_base58_encoded, 0, MAX_ADDR_OUT_LENGTH);
+              os_memset(operationContext.address_base58, 0, MAX_ADDR_OUT_LENGTH);
               base58_address_length = ada_encode_base58(
                 address_start_index,
                 raw_address_length,
-                address_base58_encoded,
+                operationContext.address_base58,
                 MAX_ADDR_OUT_LENGTH);
 
               // Capture address UI here
               // Attempt WITH Base58 Encoding
               ui_address_ptr = ui_addresses[otx_index];
               os_memset(ui_address_ptr, 0, MAX_CHAR_PER_ADDR);
-              os_memmove(ui_address_ptr, address_base58_encoded, 5);
+              os_memmove(ui_address_ptr, operationContext.address_base58, 5);
               os_memmove(ui_address_ptr + 5, "...", 3);
               os_memmove(ui_address_ptr + 8,
-                         address_base58_encoded + base58_address_length - 5,
+                         operationContext.address_base58 + base58_address_length - 5,
                          5);
               ui_addresses[otx_index][MAX_CHAR_PER_ADDR] = '\0';
 
@@ -1379,6 +1378,7 @@ void sample_main(void) {
                 tx = 0; // ensure no race in catch_other if io_exchange throws
                         // an error
                 rx = io_exchange(CHANNEL_APDU | flags, rx);
+
                 flags = 0;
 
                 // no apdu received, well, reset the session, and reset the
@@ -1402,7 +1402,6 @@ void sample_main(void) {
 
                 #ifdef INS_GET_PUBLIC_KEY_FUNC
                 case INS_GET_PUBLIC_KEY: {
-
                     operationContext.p1 = G_io_apdu_buffer[OFFSET_P1];
                     operationContext.p2 = G_io_apdu_buffer[OFFSET_P2];
                     operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
@@ -1682,19 +1681,23 @@ void sample_main(void) {
 
                     readHeaderFromAPDU();
 
-                    os_memset(address_pre_base58, G_io_apdu_buffer, 140);
-                    os_memset(address_base58_encoded, 0, 140);
+                    if(operationContext.dataLength > MAX_ADDR_IN_LENGTH) {
+                        THROW(0x5801);
+                    }
 
-                    os_memmove(address_pre_base58, operationContext.dataBuffer, operationContext.dataLength);
+                    os_memset(operationContext.address_base58, 0, MAX_ADDR_OUT_LENGTH);
 
-                    unsigned char address_length = ada_encode_base58(address_pre_base58, operationContext.dataLength,
-                      address_base58_encoded, 140);
+                    unsigned char address_length =
+                      ada_encode_base58(operationContext.dataBuffer,
+                                        operationContext.dataLength,
+                                        operationContext.address_base58,
+                                        MAX_ADDR_OUT_LENGTH);
 
                     // Display Address
                     /*
                     os_memset(tx_ui_t.ui_label, 0, 32);
                     os_memset(tx_ui_t.ui_value, 0, 32);
-                    os_memmove(tx_ui_t.ui_value, address_base58_encoded, 5);
+                    os_memmove(tx_ui_t.ui_value, operationContext.address_base58, 5);
                     os_memmove(tx_ui_t.ui_value + 5, "...", 3);
                     tx_ui_t.ui_value[8] = '\0';
                     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
@@ -1706,7 +1709,7 @@ void sample_main(void) {
 
                     G_io_apdu_buffer[tx++] = address_length;
 
-                    os_memmove(G_io_apdu_buffer + tx, address_base58_encoded, address_length);
+                    os_memmove(G_io_apdu_buffer + tx, operationContext.address_base58, address_length);
                     tx += address_length;
                     G_io_apdu_buffer[tx++] = 0x90;
                     G_io_apdu_buffer[tx++] = 0x00;
