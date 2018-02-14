@@ -21,13 +21,13 @@ static const unsigned char BASE58ALPHABET[] = "123456789ABCDEFGHJKLMNPQRSTUVWXYZ
 
 unsigned char ada_encode_base58(unsigned char *in, unsigned char length,
                                 unsigned char *out, unsigned char maxoutlen) {
-    unsigned char tmp[256];
-    unsigned char buffer[256];
+    unsigned char tmp[124];
+    unsigned char buffer[248];
     unsigned char j;
     unsigned char startAt;
     unsigned char zeroCount = 0;
     if (length > sizeof(tmp)) {
-        THROW(INVALID_PARAMETER);
+        THROW(5802);
     }
 
     os_memmove(tmp, in, length);
@@ -62,7 +62,7 @@ unsigned char ada_encode_base58(unsigned char *in, unsigned char length,
     }
     length = 2 * length - j;
     if (maxoutlen < length) {
-        THROW(EXCEPTION_OVERFLOW);
+        THROW(5803);
     }
     os_memmove(out, (buffer + j), length);
     return length;
