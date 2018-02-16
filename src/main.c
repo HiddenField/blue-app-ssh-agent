@@ -984,6 +984,8 @@ unsigned short ada_print_amount(uint64_t amount, char *out,
     return strlen(out);
 }
 
+
+// TODO: Add private and pub key init and remove old API flags.
 void derive_bip32_node_private_key(uint8_t *privateKeyDataIn) {
 
   // START Node Derivation
@@ -1086,9 +1088,22 @@ void hashDataWithBlake2b() {
 
 void io_exchange_address() {
     uint32_t tx = 0;
-    G_io_apdu_buffer[tx++] = 65; // + sizeof(operationContext.chainCode);
-    os_memmove(G_io_apdu_buffer + tx, operationContext.publicKey.W, 65);
-    tx += 65;
+
+    G_io_apdu_buffer[tx++] = 32; // + sizeof(operationContext.chainCode);
+
+    uint8_t publicKey[32];
+    // copy public key little endian to big endian
+    uint8_t i;
+    for (i = 0; i < 32; i++) {
+        publicKey[i] = operationContext.publicKey.W[64 - i];
+    }
+    if ((operationContext.publicKey.W[32] & 1) != 0) {
+        publicKey[31] |= 0x80;
+    }
+
+    os_memmove(G_io_apdu_buffer + tx, publicKey, 32);
+
+    tx += 32;
 
     if(operationContext.getWalletRecoveryPassphrase) {
         // output chain code
@@ -1126,8 +1141,8 @@ void io_exchange_set_tx() {
 
 void io_exchange_signing_aborted() {
     uint8_t tx = 0;
-    G_io_apdu_buffer[tx++] = 0x500F;
-    G_io_apdu_buffer[tx++] = 0x500F;
+    G_io_apdu_buffer[tx++] = 0x50;
+    G_io_apdu_buffer[tx++] = 0x0F;
     // Send back the response, do not restart the event loop
     io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, 2);
     // Display back the original UX
@@ -1241,22 +1256,9 @@ unsigned int prepare_tx_preview_ui() {
     } else if(tx_ui_t.tx_ui_step % 2 == 0) { // EVEN TX AMOUNT
         os_memmove(tx_ui_t.ui_label, ui_strings[0], 32);
         ada_print_amount(operationContext.txAmountData[tx_amount_index], tx_ui_t.ui_value, 32);
-        //ada_print_amount(tx_amount_index, tx_ui_t.ui_value, 31);
-        //os_memmove(tx_ui_t.ui_value, &operationContext.txAmountData[tx_amount_index], 32);
-        //tx_ui_t.ui_value[31] = '\0';
-        //SPRINTF(tx_ui_t.ui_value, "%u", operationContext.txAmountData[tx_amount_index]);
     } else {  // ODD TX ADDRESS
         os_memmove(tx_ui_t.ui_label, ui_strings[1], 32);
         os_memmove(tx_ui_t.ui_value, ui_addresses[tx_address_index], MAX_CHAR_PER_ADDR);
-
-        //ada_print_amount(operationContext.addressData[tx_address_index], tx_ui_t.ui_value, 32);
-
-        //ada_print_amount(ui_addresses[tx_address_index], tx_ui_t.ui_value, MAX_CHAR_PER_ADDR);
-
-        //ada_print_amount(tx_address_index, tx_ui_t.ui_value, 31);
-        //os_memmove(tx_ui_t.ui_value, &operationContext.addressData[tx_address_index], 32);
-        //tx_ui_t.ui_value[31] = '\0';
-        //SPRINTF(tx_ui_t.ui_value, "%u", operationContext.addressData[tx_address_index]);
     }
 
     return 0;
@@ -1444,16 +1446,9 @@ void sample_main(void) {
                                              32,
                                              &privateKey);
 
-                    #if ((CX_APILEVEL >= 5) && (CX_APILEVEL < 7))
-                        cx_ecfp_init_public_key(CX_CURVE_Ed25519, NULL, 0,
-                                                &operationContext.publicKey);
-                        cx_eddsa_get_public_key(&privateKey,
-                                                &operationContext.publicKey);
-                    #else
-                        cx_ecfp_generate_pair(CX_CURVE_Ed25519,
-                                              &operationContext.publicKey,
-                                              &privateKey, 1);
-                    #endif
+                    cx_ecfp_generate_pair(CX_CURVE_Ed25519,
+                                          &operationContext.publicKey,
+                                          &privateKey, 1);
 
                     os_memset(&privateKey, 0, sizeof(privateKey));
                     os_memset(privateKeyData, 0, sizeof(privateKeyData));
@@ -1578,8 +1573,12 @@ void sample_main(void) {
                                                       HARDENED_BIP32;
                     operationContext.bip32Path[2] = 0 |
                                                       HARDENED_BIP32;
-                    operationContext.bip32Path[3] = address_index |
-                                                      HARDENED_BIP32;
+                    operationContext.bip32Path[3] = address_index;
+
+                    if(operationContext.bip32Path[3] < HARDENED_BIP32) {
+                        //TODO: Set error code
+                        THROW(0x5201);
+                    }
 
                     derive_bip32_node_private_key(privateKeyData);
 
@@ -1589,14 +1588,16 @@ void sample_main(void) {
 
                     // TODO: Check Tx and Address Signing Indexes have not exchanged
 
-
                     uint32_t tx = 0;
                     // Sign TX
+
                     tx = cx_eddsa_sign(
                         &privateKey, NULL, CX_LAST, CX_SHA512,
-                        operationContext.message,
-                        operationContext.transactionLength,
+                        operationContext.hashTX,
+                        32,
                         G_io_apdu_buffer);
+
+
 
                     os_memset(&privateKey, 0, sizeof(privateKey));
                     os_memset(&privateKeyData, 0, sizeof(privateKeyData));
