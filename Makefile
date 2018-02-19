@@ -22,13 +22,16 @@ include $(BOLOS_SDK)/Makefile.defines
 
 SIGNKEY = `cat sign.key`
 APPSIG = `cat bin/app.sig`
+NANOS_ID = 1
+WORDS = "void come effort suffer camp survey warrior heavy shoot primary clutch crush open amazing screen patrol group space point ten exist slush involve unfold"
+PIN = 6666
 
 APPNAME = "Cardano ADA"
 APP_LOAD_PARAMS =--appFlags 0 --curve ed25519 --path "44'/1815'"
 APP_LOAD_PARAMS += --rootPrivateKey $(SIGNKEY) $(COMMON_LOAD_PARAMS)
 APPVERSION_M=0
 APPVERSION_N=1
-APPVERSION_P=0
+APPVERSION_P=1
 APPVERSION=$(APPVERSION_M).$(APPVERSION_N).$(APPVERSION_P)
 
 ICONNAME=icon.gif
@@ -44,6 +47,7 @@ DEFINES   += OS_IO_SEPROXYHAL IO_SEPROXYHAL_BUFFER_SIZE_B=128
 DEFINES   += HAVE_BAGL HAVE_PRINTF
 DEFINES   += HAVE_IO_USB HAVE_L4_USBLIB IO_USB_MAX_ENDPOINTS=6 IO_HID_EP_LENGTH=64 HAVE_USB_APDU
 DEFINES   += VERSION=\"$(APPVERSION)\"
+DEFINES   += LEDGER_MAJOR_VERSION=$(APPVERSION_M) LEDGER_MINOR_VERSION=$(APPVERSION_N) LEDGER_PATCH_VERSION=$(APPVERSION_P)
 
 ##############
 #  Compiler  #
@@ -75,6 +79,7 @@ build: all
 build: DEFINES += INS_SIGN_TX_FUNC
 build: DEFINES += INS_SET_TX_FUNC
 build: DEFINES += INS_GET_PUBLIC_KEY_FUNC
+build: DEFINES += INS_APP_INFO_FUNC
 
 build-test: all
 build-test: DEFINES += INS_BLAKE2B_TEST_FUNC
@@ -102,6 +107,9 @@ headless: load
 
 delete:
 	python -m ledgerblue.deleteApp $(COMMON_DELETE_PARAMS) --rootPrivateKey $(SIGNKEY)
+
+seed:
+	python -m ledgerblue.hostOnboard --id $(NANOS_ID) --words $(WORDS) --pin $(PIN)
 
 # import generic rules from the sdk
 include $(BOLOS_SDK)/Makefile.rules
