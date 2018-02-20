@@ -66,6 +66,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define INS_GET_PUBLIC_KEY 0x01
 #define INS_SET_TX 0x02
 #define INS_SIGN_TX 0x03
+#define INS_APP_INFO 0x04
 #define INS_BLAKE2B_TEST 0x07
 #define INS_BASE58_ENCODE_TEST 0x08
 #define INS_CBOR_DECODE_TEST 0x09
@@ -1554,7 +1555,7 @@ void sample_main(void) {
                         // Reset signing transaction
                         resetSigningTx();
                         // Expecting Tx has been set
-                        THROW(0x500F);
+                        THROW(0x500E);
                     }
 
                     // TODO: Check passed in hash equals Tx and Address Index Hash
@@ -1625,7 +1626,25 @@ void sample_main(void) {
                 #endif //INS_SIGN_TX_FUNC
 
 
+                #ifdef INS_APP_INFO_FUNC
+                case INS_APP_INFO: {
 
+                    uint32_t tx = 0;
+
+                    G_io_apdu_buffer[tx++] = LEDGER_MAJOR_VERSION;
+                    G_io_apdu_buffer[tx++] = LEDGER_MINOR_VERSION;
+                    G_io_apdu_buffer[tx++] = LEDGER_PATCH_VERSION;
+
+                    G_io_apdu_buffer[tx++] = 0x90;
+                    G_io_apdu_buffer[tx++] = 0x00;
+                    // Send back the response, do not restart the event loop
+                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
+                    // Display back the original UX
+                    ui_idle();
+
+                }
+                break;
+                #endif //INS_APP_INFO_FUNC
 
 
                 #ifdef INS_CBOR_DECODE_TEST_FUNC
