@@ -1105,7 +1105,7 @@ void io_exchange_set_tx() {
     for (int i=0; i < opCtx.finalUTXOCount; i++ ) {
 
         os_memmove(G_io_apdu_buffer + tx, &tx_ui.ui_addresses[i], MAX_CHAR_PER_ADDR);
-        tx += MAX_CHAR_PER_ADDR;
+        tx += MAX_CHAR_PER_ADDR - 1;
         os_memmove(G_io_apdu_buffer + tx, &opCtx.txAmountData[i], 8);
         tx += 8;
     }
