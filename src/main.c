@@ -123,9 +123,9 @@ typedef struct operationContext_t {
     #endif
 } operationContext_t;
 
+operationContext_t operationContext;
 
-char *ui_addresses[MAX_TX_IO][MAX_CHAR_PER_ADDR];
-char *ui_address_ptr;
+
 uint8_t raw_address_length;
 uint8_t base58_address_length;
 #ifdef INS_CBOR_DECODE_TEST_FUNC
@@ -141,17 +141,20 @@ uint8_t tx_sign_counter;
 
 const char * const ui_strings[3] = {"Send ADA", "To Address", "TX Fee ADA" };
 
-struct {
+typedef struct {
     char ui_label[32];
     char ui_value[32];
     uint8_t tx_ui_step;
     uint8_t otx_count;
+    char *ui_addresses[MAX_TX_IO][MAX_CHAR_PER_ADDR];
+    char *ui_address_ptr;
+    char ada_print_amount_tmp[32];
+    char ada_print_amount_tmp_2[32];
 } tx_ui_t;
 
-operationContext_t operationContext;
+tx_ui_t tx_ui;
 
-char ada_print_amount_tmp[32];
-char ada_print_amount_tmp_2[32];
+
 
 
 
@@ -324,7 +327,7 @@ const bagl_element_t bagl_ui_preview_tx_nanos[] = {
     {
         {BAGL_LABELINE, 0x00, 0, 12, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
          BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-        tx_ui_t.ui_label,
+        tx_ui.ui_label,
         0,
         0,
         0,
@@ -335,7 +338,7 @@ const bagl_element_t bagl_ui_preview_tx_nanos[] = {
     {
         {BAGL_LABELINE, 0x00, 0, 28, 128, 16, 0, 0, 0, 0xFFFFFF, 0x000000,
          BAGL_FONT_OPEN_SANS_REGULAR_11px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-        tx_ui_t.ui_value,
+        tx_ui.ui_value,
         0,
         0,
         0,
@@ -841,14 +844,14 @@ void parse_cbor_transaction() {
 
               // Capture address UI here
               // Attempt WITH Base58 Encoding
-              ui_address_ptr = ui_addresses[otx_index];
-              os_memset(ui_address_ptr, 0, MAX_CHAR_PER_ADDR);
-              os_memmove(ui_address_ptr, operationContext.address_base58, 5);
-              os_memmove(ui_address_ptr + 5, "...", 3);
-              os_memmove(ui_address_ptr + 8,
+              tx_ui.ui_address_ptr = tx_ui.ui_addresses[otx_index];
+              os_memset(tx_ui.ui_address_ptr, 0, MAX_CHAR_PER_ADDR);
+              os_memmove(tx_ui.ui_address_ptr, operationContext.address_base58, 5);
+              os_memmove(tx_ui.ui_address_ptr + 5, "...", 3);
+              os_memmove(tx_ui.ui_address_ptr + 8,
                          operationContext.address_base58 + base58_address_length - 5,
                          5);
-              ui_addresses[otx_index][MAX_CHAR_PER_ADDR] = '\0';
+              tx_ui.ui_addresses[otx_index][MAX_CHAR_PER_ADDR] = '\0';
 
               // Skip CBOR int type
               offset++;
@@ -955,8 +958,8 @@ bool adjustDecimals(char *src, uint32_t srcLength, char *target,
 unsigned short ada_print_amount(uint64_t amount, char *out,
                                 uint32_t outlen) {
 
-    os_memset(ada_print_amount_tmp, 0, 32);
-    os_memset(ada_print_amount_tmp_2, 0, 32);
+    os_memset(tx_ui.ada_print_amount_tmp, 0, 32);
+    os_memset(tx_ui.ada_print_amount_tmp_2, 0, 32);
 
     uint32_t numDigits = 0, i;
     uint64_t base = 1;
@@ -964,21 +967,21 @@ unsigned short ada_print_amount(uint64_t amount, char *out,
         base *= 10;
         numDigits++;
     }
-    if (numDigits > sizeof(ada_print_amount_tmp) - 1) {
+    if (numDigits > sizeof(tx_ui.ada_print_amount_tmp) - 1) {
         THROW(EXCEPTION);
     }
     base /= 10;
     for (i = 0; i < numDigits; i++) {
-        ada_print_amount_tmp[i] = '0' + ((amount / base) % 10);
+        tx_ui.ada_print_amount_tmp[i] = '0' + ((amount / base) % 10);
         base /= 10;
     }
-    ada_print_amount_tmp[i] = '\0';
-    //strcpy(ada_print_amount_tmp_2, "");
-    adjustDecimals(ada_print_amount_tmp, i, ada_print_amount_tmp_2, 32, 6);
-    if (strlen(ada_print_amount_tmp_2) < outlen - 1) {
-    //if (strlen(ada_print_amount_tmp) < outlen - 1) {
-        //strcpy(out, ada_print_amount_tmp_2);
-        os_memmove(out, ada_print_amount_tmp_2, 32);
+    tx_ui.ada_print_amount_tmp[i] = '\0';
+    //strcpy(tx_ui.ada_print_amount_tmp_2, "");
+    adjustDecimals(tx_ui.ada_print_amount_tmp, i, tx_ui.ada_print_amount_tmp_2, 32, 6);
+    if (strlen(tx_ui.ada_print_amount_tmp_2) < outlen - 1) {
+    //if (strlen(tx_ui.ada_print_amount_tmp) < outlen - 1) {
+        //strcpy(out, tx_ui.ada_print_amount_tmp_2);
+        os_memmove(out, tx_ui.ada_print_amount_tmp_2, 32);
     } else {
         out[0] = '\0';
     }
@@ -1128,7 +1131,7 @@ void io_exchange_set_tx() {
 
     for (int i=0; i < operationContext.finalUTXOCount; i++ ) {
 
-        os_memmove(G_io_apdu_buffer + tx, &ui_addresses[i], MAX_CHAR_PER_ADDR -1 );
+        os_memmove(G_io_apdu_buffer + tx, &tx_ui.ui_addresses[i], MAX_CHAR_PER_ADDR -1 );
         tx += MAX_CHAR_PER_ADDR - 1;
         os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i], 8);
         tx += 8;
@@ -1151,7 +1154,7 @@ void io_exchange_signing_aborted() {
 }
 
 void resetSigningTx() {
-    tx_ui_t.tx_ui_step = -1;
+    tx_ui.tx_ui_step = -1;
     os_memset(operationContext.message, 0, MAX_TX_SIZE);
     operationContext.transactionLength = 0;
     os_memset(operationContext.hashTX, 0, 32);
@@ -1188,8 +1191,8 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e) {
 }
 
 unsigned int io_seproxyhal_touch_preview_ok(const bagl_element_t *e) {
-    tx_ui_t.tx_ui_step = 0;
-    tx_ui_t.otx_count = operationContext.finalUTXOCount;
+    tx_ui.tx_ui_step = 0;
+    tx_ui.otx_count = operationContext.finalUTXOCount;
 
     prepare_tx_preview_ui();
 
@@ -1208,9 +1211,9 @@ unsigned int io_seproxyhal_touch_preview_cancel(const bagl_element_t *e) {
 }
 
 unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e) {
-    if(tx_ui_t.tx_ui_step > 0) {  // GO BACK
+    if(tx_ui.tx_ui_step > 0) {  // GO BACK
 
-        tx_ui_t.tx_ui_step--;
+        tx_ui.tx_ui_step--;
 
     } else { // EXIT
 
@@ -1227,11 +1230,11 @@ unsigned int io_seproxyhal_touch_preview_prev(const bagl_element_t *e) {
 
 unsigned int io_seproxyhal_touch_preview_next(const bagl_element_t *e) {
 
-    if(tx_ui_t.tx_ui_step == (tx_ui_t.otx_count * 2)) {  // CONTINUE TO SIGN
+    if(tx_ui.tx_ui_step == (tx_ui.otx_count * 2)) {  // CONTINUE TO SIGN
         UX_DISPLAY(bagl_ui_sign_tx_nanos, NULL);
         return 0;
     } else {  // SHOW NEXT
-        tx_ui_t.tx_ui_step++;
+        tx_ui.tx_ui_step++;
     }
 
     prepare_tx_preview_ui();
@@ -1245,21 +1248,21 @@ unsigned int prepare_tx_preview_ui() {
 
     uint64_t fee = 0x00000000;
 
-    os_memset(tx_ui_t.ui_label, 0, 32);
-    os_memset(tx_ui_t.ui_value, 0, 32);
+    os_memset(tx_ui.ui_label, 0, 32);
+    os_memset(tx_ui.ui_value, 0, 32);
 
-    int tx_amount_index = tx_ui_t.tx_ui_step/2;
-    int tx_address_index = (tx_ui_t.tx_ui_step -1)/2;
+    int tx_amount_index = tx_ui.tx_ui_step/2;
+    int tx_address_index = (tx_ui.tx_ui_step -1)/2;
 
-    if(tx_ui_t.tx_ui_step == (tx_ui_t.otx_count * 2)) {
-        os_memmove(tx_ui_t.ui_label, ui_strings[2], 32);
-        ada_print_amount(fee, tx_ui_t.ui_value, 32);
-    } else if(tx_ui_t.tx_ui_step % 2 == 0) { // EVEN TX AMOUNT
-        os_memmove(tx_ui_t.ui_label, ui_strings[0], 32);
-        ada_print_amount(operationContext.txAmountData[tx_amount_index], tx_ui_t.ui_value, 32);
+    if(tx_ui.tx_ui_step == (tx_ui.otx_count * 2)) {
+        os_memmove(tx_ui.ui_label, ui_strings[2], 32);
+        ada_print_amount(fee, tx_ui.ui_value, 32);
+    } else if(tx_ui.tx_ui_step % 2 == 0) { // EVEN TX AMOUNT
+        os_memmove(tx_ui.ui_label, ui_strings[0], 32);
+        ada_print_amount(operationContext.txAmountData[tx_amount_index], tx_ui.ui_value, 32);
     } else {  // ODD TX ADDRESS
-        os_memmove(tx_ui_t.ui_label, ui_strings[1], 32);
-        os_memmove(tx_ui_t.ui_value, ui_addresses[tx_address_index], MAX_CHAR_PER_ADDR);
+        os_memmove(tx_ui.ui_label, ui_strings[1], 32);
+        os_memmove(tx_ui.ui_value, tx_ui.ui_addresses[tx_address_index], MAX_CHAR_PER_ADDR);
     }
 
     return 0;
@@ -1715,11 +1718,11 @@ void sample_main(void) {
 
                     // Display Address
                     /*
-                    os_memset(tx_ui_t.ui_label, 0, 32);
-                    os_memset(tx_ui_t.ui_value, 0, 32);
-                    os_memmove(tx_ui_t.ui_value, operationContext.address_base58, 5);
-                    os_memmove(tx_ui_t.ui_value + 5, "...", 3);
-                    tx_ui_t.ui_value[8] = '\0';
+                    os_memset(tx_ui.ui_label, 0, 32);
+                    os_memset(tx_ui.ui_value, 0, 32);
+                    os_memmove(tx_ui.ui_value, operationContext.address_base58, 5);
+                    os_memmove(tx_ui.ui_value + 5, "...", 3);
+                    tx_ui.ui_value[8] = '\0';
                     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
                     flags |= IO_ASYNCH_REPLY;
                     */
