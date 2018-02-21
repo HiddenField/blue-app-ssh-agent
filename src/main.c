@@ -127,7 +127,7 @@ typedef struct opCtx_t {
     uint8_t tx_sign_counter;
     #ifdef INS_CBOR_DECODE_TEST_FUNC
         uint32_t addressData[16];
-        uint8_t *opCtx.checkSumPtr;
+        uint8_t *checkSumPtr;
     #endif
 } opCtx_t;
 
