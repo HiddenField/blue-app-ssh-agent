@@ -118,9 +118,13 @@ typedef struct opCtx_t {
     uint8_t finalUTXOCount;
     uint64_t txAmountData[MAX_TX_IO];
     uint8_t hashTX[32];
-
-
-
+    uint8_t raw_address_length;
+    uint8_t base58_address_length;
+    uint8_t *address_start_index;
+    uint8_t *txAmount;
+    uint8_t privateKeyData[32];
+    bool is_tx_set;
+    uint8_t tx_sign_counter;
     #ifdef INS_CBOR_DECODE_TEST_FUNC
         uint32_t addressData[16];
         uint8_t *opCtx.checkSumPtr;
@@ -128,19 +132,6 @@ typedef struct opCtx_t {
 } opCtx_t;
 
 opCtx_t opCtx;
-
-
-uint8_t raw_address_length;
-uint8_t base58_address_length;
-uint8_t *address_start_index;
-uint8_t *txAmount;
-uint32_t *current_signing_address_i;
-uint8_t privateKeyData[32];
-cx_ecfp_private_key_t privateKey;
-bool is_tx_set;
-uint8_t tx_sign_counter;
-
-const char * const ui_strings[3] = {"Send ADA", "To Address", "TX Fee ADA" };
 
 typedef struct tx_ui_t {
     char ui_label[32];
@@ -155,9 +146,8 @@ typedef struct tx_ui_t {
 
 tx_ui_t tx_ui;
 
-
-
-
+const char * const ui_strings[3] = {"Send ADA", "To Address", "TX Fee ADA" };
+cx_ecfp_private_key_t privateKey;
 
 
 const bagl_element_t ui_idle_nanos[] = {
@@ -206,7 +196,6 @@ unsigned int ui_idle_nanos_button(unsigned int button_mask,
     }
     return 0;
 }
-
 
 
 const bagl_element_t bagl_ui_sign_tx_nanos[] = {
@@ -277,7 +266,6 @@ const bagl_element_t bagl_ui_sign_tx_nanos[] = {
         NULL,
     },
 };
-
 unsigned int
 bagl_ui_sign_tx_nanos_button(unsigned int button_mask,
                             unsigned int button_mask_counter) {
@@ -297,9 +285,6 @@ bagl_ui_sign_tx_nanos_button(unsigned int button_mask,
     }
     return 0;
 }
-
-
-
 
 
 const bagl_element_t bagl_ui_preview_tx_nanos[] = {
@@ -370,7 +355,6 @@ const bagl_element_t bagl_ui_preview_tx_nanos[] = {
         NULL,
     },
 };
-
 unsigned int
 bagl_ui_preview_tx_nanos_button(unsigned int button_mask,
                             unsigned int button_mask_counter) {
@@ -459,7 +443,6 @@ const bagl_element_t bagl_ui_approval_preview_tx_nanos[] = {
         NULL,
     },
 };
-
 unsigned int
 bagl_ui_approval_preview_tx_nanos_button(unsigned int button_mask,
                             unsigned int button_mask_counter) {
@@ -479,7 +462,6 @@ bagl_ui_approval_preview_tx_nanos_button(unsigned int button_mask,
     }
     return 0;
 }
-
 
 
 const bagl_element_t bagl_ui_signing_tx_nanos[] = {
@@ -528,15 +510,11 @@ const bagl_element_t bagl_ui_signing_tx_nanos[] = {
         NULL,
     },
 };
-
 unsigned int
 bagl_ui_signing_tx_nanos_button(unsigned int button_mask,
                             unsigned int button_mask_counter) {
     return 0;
 }
-
-
-
 
 
 const bagl_element_t bagl_ui_signing_completed_nanos[] = {
@@ -585,7 +563,6 @@ const bagl_element_t bagl_ui_signing_completed_nanos[] = {
         NULL,
     },
 };
-
 unsigned int
 bagl_ui_signing_completed_nanos_button(unsigned int button_mask,
                             unsigned int button_mask_counter) {
@@ -597,8 +574,6 @@ bagl_ui_signing_completed_nanos_button(unsigned int button_mask,
     }
     return 0;
 }
-
-
 
 
 const bagl_element_t bagl_ui_signing_aborted_nanos[] = {
@@ -647,7 +622,6 @@ const bagl_element_t bagl_ui_signing_aborted_nanos[] = {
         NULL,
     },
 };
-
 unsigned int
 bagl_ui_signing_aborted_nanos_button(unsigned int button_mask,
                             unsigned int button_mask_counter) {
@@ -659,8 +633,6 @@ bagl_ui_signing_aborted_nanos_button(unsigned int button_mask,
     }
     return 0;
 }
-
-
 
 
 const bagl_element_t ui_address_nanos[] = {
@@ -799,7 +771,7 @@ void parse_cbor_transaction() {
   }
 
   // Assuming this Tx needs to be signed itx_count number of times
-  tx_sign_counter = itx_count;
+  opCtx.tx_sign_counter = itx_count;
 
   // Scan through Output TXs
   opCtx.finalUTXOCount = 0;
@@ -814,7 +786,7 @@ void parse_cbor_transaction() {
           offset += 4;
           if(opCtx.message[offset] == 0x58) {
 
-              address_start_index = opCtx.message + offset - 3;
+              opCtx.address_start_index = opCtx.message + offset - 3;
 
               array_length = opCtx.message[++offset];
               // Skip Array Length
@@ -834,12 +806,12 @@ void parse_cbor_transaction() {
               offset += 4;
 
               // Base58 Encode Address
-              raw_address_length = array_length + 10;
+              opCtx.raw_address_length = array_length + 10;
 
               os_memset(opCtx.address_base58, 0, MAX_ADDR_OUT_LENGTH);
-              base58_address_length = ada_encode_base58(
-                address_start_index,
-                raw_address_length,
+              opCtx.base58_address_length = ada_encode_base58(
+                opCtx.address_start_index,
+                opCtx.raw_address_length,
                 opCtx.address_base58,
                 MAX_ADDR_OUT_LENGTH);
 
@@ -850,7 +822,7 @@ void parse_cbor_transaction() {
               os_memmove(tx_ui.ui_address_ptr, opCtx.address_base58, 5);
               os_memmove(tx_ui.ui_address_ptr + 5, "...", 3);
               os_memmove(tx_ui.ui_address_ptr + 8,
-                         opCtx.address_base58 + base58_address_length - 5,
+                         opCtx.address_base58 + opCtx.base58_address_length - 5,
                          5);
               tx_ui.ui_addresses[otx_index][MAX_CHAR_PER_ADDR] = '\0';
 
@@ -858,16 +830,16 @@ void parse_cbor_transaction() {
               offset++;
 
               // Tx Output Amount
-              txAmount = opCtx.message + offset;
+              opCtx.txAmount = opCtx.message + offset;
               opCtx.txAmountData[otx_index] =
-                       ((uint64_t)txAmount[7]) |
-                       ((uint64_t)txAmount[6] << 8) |
-                       ((uint64_t)txAmount[5] << 16) |
-                       ((uint64_t)txAmount[4] << 24) |
-                       ((uint64_t)txAmount[3] << 32) |
-                       ((uint64_t)txAmount[2] << 40) |
-                       ((uint64_t)txAmount[1] << 48) |
-                       ((uint64_t)txAmount[0] << 56);
+                       ((uint64_t)opCtx.txAmount[7]) |
+                       ((uint64_t)opCtx.txAmount[6] << 8) |
+                       ((uint64_t)opCtx.txAmount[5] << 16) |
+                       ((uint64_t)opCtx.txAmount[4] << 24) |
+                       ((uint64_t)opCtx.txAmount[3] << 32) |
+                       ((uint64_t)opCtx.txAmount[2] << 40) |
+                       ((uint64_t)opCtx.txAmount[1] << 48) |
+                       ((uint64_t)opCtx.txAmount[0] << 56);
               offset += 8;
 
               otx_index++;
@@ -1127,7 +1099,7 @@ void io_exchange_address() {
 
 void io_exchange_set_tx() {
     uint32_t tx = 0;
-    G_io_apdu_buffer[tx++] = tx_sign_counter;
+    G_io_apdu_buffer[tx++] = opCtx.tx_sign_counter;
     G_io_apdu_buffer[tx++] = opCtx.finalUTXOCount;
 
     for (int i=0; i < opCtx.finalUTXOCount; i++ ) {
@@ -1159,12 +1131,12 @@ void resetSigningTx() {
     os_memset(opCtx.message, 0, MAX_TX_SIZE);
     opCtx.transactionLength = 0;
     os_memset(opCtx.hashTX, 0, 32);
-    is_tx_set = false;
-    tx_sign_counter = 0;
+    opCtx.is_tx_set = false;
+    opCtx.tx_sign_counter = 0;
 }
 
 unsigned int abortSigningTxUI() {
-    if(is_tx_set) {
+    if(opCtx.is_tx_set) {
         resetSigningTx();
 
         #ifdef HEADLESS
@@ -1368,7 +1340,7 @@ void sample_main(void) {
     volatile unsigned int tx = 0;
     volatile unsigned int flags = 0;
 
-    is_tx_set = false;
+    opCtx.is_tx_set = false;
 
     // DESIGN NOTE: the bootloader ignores the way APDU are fetched. The only
     // goal is to retrieve APDU.
@@ -1445,9 +1417,9 @@ void sample_main(void) {
                         THROW(0x5202);
                     }
 
-                    derive_bip32_node_private_key(privateKeyData);
+                    derive_bip32_node_private_key(opCtx.privateKeyData);
                     cx_ecfp_init_private_key(CX_CURVE_Ed25519,
-                                             privateKeyData,
+                                             opCtx.privateKeyData,
                                              32,
                                              &privateKey);
 
@@ -1456,7 +1428,7 @@ void sample_main(void) {
                                           &privateKey, 1);
 
                     os_memset(&privateKey, 0, sizeof(privateKey));
-                    os_memset(privateKeyData, 0, sizeof(privateKeyData));
+                    os_memset(opCtx.privateKeyData, 0, sizeof(opCtx.privateKeyData));
 
                     #ifdef HEADLESS
                         io_exchange_address();
@@ -1524,7 +1496,7 @@ void sample_main(void) {
 
                         hashDataWithBlake2b();
 
-                        is_tx_set = true;
+                        opCtx.is_tx_set = true;
 
                         #ifdef HEADLESS
                             io_exchange_set_tx();
@@ -1555,7 +1527,7 @@ void sample_main(void) {
                 case INS_SIGN_TX: {
 
                     // Check Tx and Address Signing Indexes have been set
-                    if(!is_tx_set || tx_sign_counter <= 0) {
+                    if(!opCtx.is_tx_set || opCtx.tx_sign_counter <= 0) {
                         // Reset signing transaction
                         resetSigningTx();
                         // Expecting Tx has been set
@@ -1585,10 +1557,10 @@ void sample_main(void) {
                         THROW(0x5201);
                     }
 
-                    derive_bip32_node_private_key(privateKeyData);
+                    derive_bip32_node_private_key(opCtx.privateKeyData);
 
                     cx_ecfp_init_private_key(CX_CURVE_Ed25519,
-                                             privateKeyData, 32,
+                                             opCtx.privateKeyData, 32,
                                              &privateKey);
 
                     // TODO: Check Tx and Address Signing Indexes have not exchanged
@@ -1605,7 +1577,7 @@ void sample_main(void) {
 
 
                     os_memset(&privateKey, 0, sizeof(privateKey));
-                    os_memset(&privateKeyData, 0, sizeof(privateKeyData));
+                    os_memset(&opCtx.privateKeyData, 0, sizeof(opCtx.privateKeyData));
 
                     G_io_apdu_buffer[tx++] = 0x90;
                     G_io_apdu_buffer[tx++] = 0x00;
@@ -1614,8 +1586,8 @@ void sample_main(void) {
                     // Display back the original UX
 
                     // Reduce signing counter and check complete
-                    tx_sign_counter--;
-                    if(tx_sign_counter == 0 ) {
+                    opCtx.tx_sign_counter--;
+                    if(opCtx.tx_sign_counter == 0 ) {
                         resetSigningTx();
                         #ifdef HEADLESS
                             ui_idle();
@@ -1667,7 +1639,7 @@ void sample_main(void) {
                   if(opCtx.isDataReadComplete) {
 
                       // Output total Tx inputs
-                      G_io_apdu_buffer[tx++] = tx_sign_counter;
+                      G_io_apdu_buffer[tx++] = opCtx.tx_sign_counter;
                       // Output total Tx outputs
                       G_io_apdu_buffer[tx++] = opCtx.finalUTXOCount;
 
