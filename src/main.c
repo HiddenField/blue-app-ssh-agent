@@ -138,7 +138,7 @@ typedef struct tx_ui_t {
     char ui_value[32];
     uint8_t tx_ui_step;
     uint8_t otx_count;
-    char *ui_addresses[MAX_TX_IO][MAX_CHAR_PER_ADDR];
+    char *ui_addresses[MAX_TX_IO][MAX_CHAR_PER_ADDR + 1];
     char *ui_address_ptr;
     char ada_print_amount_tmp[32];
     char ada_print_amount_tmp_2[32];
@@ -817,7 +817,7 @@ void parse_cbor_transaction() {
 
               // Capture address UI here
               // Attempt WITH Base58 Encoding
-              tx_ui.ui_address_ptr = tx_ui.ui_addresses[otx_index];
+              tx_ui.ui_address_ptr = (char *)tx_ui.ui_addresses[otx_index];
               os_memset(tx_ui.ui_address_ptr, 0, MAX_CHAR_PER_ADDR);
               os_memmove(tx_ui.ui_address_ptr, opCtx.address_base58, 5);
               os_memmove(tx_ui.ui_address_ptr + 5, "...", 3);
@@ -1104,8 +1104,8 @@ void io_exchange_set_tx() {
 
     for (int i=0; i < opCtx.finalUTXOCount; i++ ) {
 
-        os_memmove(G_io_apdu_buffer + tx, &tx_ui.ui_addresses[i], MAX_CHAR_PER_ADDR -1 );
-        tx += MAX_CHAR_PER_ADDR - 1;
+        os_memmove(G_io_apdu_buffer + tx, &tx_ui.ui_addresses[i], MAX_CHAR_PER_ADDR);
+        tx += MAX_CHAR_PER_ADDR;
         os_memmove(G_io_apdu_buffer + tx, &opCtx.txAmountData[i], 8);
         tx += 8;
     }
