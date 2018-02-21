@@ -824,7 +824,7 @@ void parse_cbor_transaction() {
               os_memmove(tx_ui.ui_address_ptr + 8,
                          opCtx.address_base58 + opCtx.base58_address_length - 5,
                          5);
-              tx_ui.ui_addresses[otx_index][MAX_CHAR_PER_ADDR] = '\0';
+              tx_ui.ui_addresses[otx_index][MAX_CHAR_PER_ADDR] = 0x00;
 
               // Skip CBOR int type
               offset++;
