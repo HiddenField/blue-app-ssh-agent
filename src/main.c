@@ -100,7 +100,7 @@ unsigned int ux_step_count;
 
 ux_state_t ux;
 
-typedef struct operationContext_t {
+typedef struct opCtx_t {
     uint8_t p1;
     uint8_t p2;
     uint8_t *dataBuffer;
@@ -118,19 +118,20 @@ typedef struct operationContext_t {
     uint8_t finalUTXOCount;
     uint64_t txAmountData[MAX_TX_IO];
     uint8_t hashTX[32];
-    #ifdef INS_CBOR_DECODE_TEST_FUNC
-    uint32_t addressData[16];
-    #endif
-} operationContext_t;
 
-operationContext_t operationContext;
+
+
+    #ifdef INS_CBOR_DECODE_TEST_FUNC
+        uint32_t addressData[16];
+        uint8_t *opCtx.checkSumPtr;
+    #endif
+} opCtx_t;
+
+opCtx_t opCtx;
 
 
 uint8_t raw_address_length;
 uint8_t base58_address_length;
-#ifdef INS_CBOR_DECODE_TEST_FUNC
-uint8_t *checkSumPtr;
-#endif
 uint8_t *address_start_index;
 uint8_t *txAmount;
 uint32_t *current_signing_address_i;
@@ -141,7 +142,7 @@ uint8_t tx_sign_counter;
 
 const char * const ui_strings[3] = {"Send ADA", "To Address", "TX Fee ADA" };
 
-typedef struct {
+typedef struct tx_ui_t {
     char ui_label[32];
     char ui_value[32];
     uint8_t tx_ui_step;
@@ -747,7 +748,7 @@ bool cbor_at_break(unsigned char *buffer, size_t offset)
 bool cbor_at_end(unsigned char *buffer, size_t offset)
 {
     /* cbor_stream_t::pos points at the next *free* byte, hence the -1 */
-    return buffer ? offset >= operationContext.transactionLength - 1 : true;
+    return buffer ? offset >= opCtx.transactionLength - 1 : true;
 }
 
 size_t cbor_deserialize_array_indefinite(unsigned char *buffer, size_t offset)
@@ -768,16 +769,16 @@ void parse_cbor_transaction() {
   uint32_t offset = 1;
 
   // Scan through Input TX and ensure they're valid
-  if(cbor_deserialize_array_indefinite(operationContext.message, offset) ) {
+  if(cbor_deserialize_array_indefinite(opCtx.message, offset) ) {
       offset++;
-      while(!cbor_at_break(operationContext.message, offset) && !error) {
+      while(!cbor_at_break(opCtx.message, offset) && !error) {
           if(itx_count >= MAX_TX_IO) {
               THROW(0x5905);
           }
           // Skip tag
           offset += 4;
-          if(operationContext.message[offset] == 0x58) {
-              array_length = operationContext.message[++offset];
+          if(opCtx.message[offset] == 0x58) {
+              array_length = opCtx.message[++offset];
               // Skip Array Length
               offset += (array_length + 1);
           } else {
@@ -801,21 +802,21 @@ void parse_cbor_transaction() {
   tx_sign_counter = itx_count;
 
   // Scan through Output TXs
-  operationContext.finalUTXOCount = 0;
-  if(cbor_deserialize_array_indefinite(operationContext.message, offset) ) {
+  opCtx.finalUTXOCount = 0;
+  if(cbor_deserialize_array_indefinite(opCtx.message, offset) ) {
       offset ++;
 
-      while(!cbor_at_break(operationContext.message, offset) && !error) {
+      while(!cbor_at_break(opCtx.message, offset) && !error) {
           if(otx_index >= MAX_TX_IO) {
               THROW(0x5906);
           }
           // Skip tag
           offset += 4;
-          if(operationContext.message[offset] == 0x58) {
+          if(opCtx.message[offset] == 0x58) {
 
-              address_start_index = operationContext.message + offset - 3;
+              address_start_index = opCtx.message + offset - 3;
 
-              array_length = operationContext.message[++offset];
+              array_length = opCtx.message[++offset];
               // Skip Array Length
               offset += array_length +1;
               // Skip CBOR int type
@@ -823,10 +824,10 @@ void parse_cbor_transaction() {
 
               #ifdef INS_CBOR_DECODE_TEST_FUNC
               // Address Checksum
-              checkSumPtr = operationContext.message + offset;
-              operationContext.addressData[otx_index] =
-                  (checkSumPtr[3] << 24) | (checkSumPtr[2] << 16) |
-                  (checkSumPtr[1] << 8) | (checkSumPtr[0]);
+              opCtx.checkSumPtr = opCtx.message + offset;
+              opCtx.addressData[otx_index] =
+                  (opCtx.checkSumPtr[3] << 24) | (opCtx.checkSumPtr[2] << 16) |
+                  (opCtx.checkSumPtr[1] << 8) | (opCtx.checkSumPtr[0]);
               #endif
 
               // End of address at this offset
@@ -835,21 +836,21 @@ void parse_cbor_transaction() {
               // Base58 Encode Address
               raw_address_length = array_length + 10;
 
-              os_memset(operationContext.address_base58, 0, MAX_ADDR_OUT_LENGTH);
+              os_memset(opCtx.address_base58, 0, MAX_ADDR_OUT_LENGTH);
               base58_address_length = ada_encode_base58(
                 address_start_index,
                 raw_address_length,
-                operationContext.address_base58,
+                opCtx.address_base58,
                 MAX_ADDR_OUT_LENGTH);
 
               // Capture address UI here
               // Attempt WITH Base58 Encoding
               tx_ui.ui_address_ptr = tx_ui.ui_addresses[otx_index];
               os_memset(tx_ui.ui_address_ptr, 0, MAX_CHAR_PER_ADDR);
-              os_memmove(tx_ui.ui_address_ptr, operationContext.address_base58, 5);
+              os_memmove(tx_ui.ui_address_ptr, opCtx.address_base58, 5);
               os_memmove(tx_ui.ui_address_ptr + 5, "...", 3);
               os_memmove(tx_ui.ui_address_ptr + 8,
-                         operationContext.address_base58 + base58_address_length - 5,
+                         opCtx.address_base58 + base58_address_length - 5,
                          5);
               tx_ui.ui_addresses[otx_index][MAX_CHAR_PER_ADDR] = '\0';
 
@@ -857,8 +858,8 @@ void parse_cbor_transaction() {
               offset++;
 
               // Tx Output Amount
-              txAmount = operationContext.message + offset;
-              operationContext.txAmountData[otx_index] =
+              txAmount = opCtx.message + offset;
+              opCtx.txAmountData[otx_index] =
                        ((uint64_t)txAmount[7]) |
                        ((uint64_t)txAmount[6] << 8) |
                        ((uint64_t)txAmount[5] << 16) |
@@ -886,7 +887,7 @@ void parse_cbor_transaction() {
       THROW(0x5904);
   }
 
-  operationContext.finalUTXOCount = otx_index;
+  opCtx.finalUTXOCount = otx_index;
 
 }
 
@@ -996,15 +997,15 @@ void derive_bip32_node_private_key(uint8_t *privateKeyDataIn) {
   #if CX_APILEVEL >= 5
       os_perso_derive_node_bip32(
           CX_CURVE_Ed25519,
-          operationContext.bip32Path,
-          operationContext.pathLength,
+          opCtx.bip32Path,
+          opCtx.pathLength,
           privateKeyDataIn,
-          operationContext.chainCode);
+          opCtx.chainCode);
   #else
-      os_perso_derive_seed_bip32(operationContext.bip32Path,
-                                 operationContext.pathLength,
+      os_perso_derive_seed_bip32(opCtx.bip32Path,
+                                 opCtx.pathLength,
                                  privateKeyDataIn,
-                                 operationContext.chainCode);
+                                 opCtx.chainCode);
   #endif
   // END Node Derivation
 
@@ -1021,40 +1022,40 @@ void parse_uint32(uint32_t *value, uint8_t *data) {
  * Throws: 5001 if buffer is exceeded.
  */
 void checkAndCopyDataToBuffer() {
-    if(operationContext.dataOffset + operationContext.dataLength > (MAX_TX_SIZE + 1))
+    if(opCtx.dataOffset + opCtx.dataLength > (MAX_TX_SIZE + 1))
     {
         THROW(0x5001);
     } else {
-        os_memmove(operationContext.message +
-                operationContext.dataOffset,
-                operationContext.dataBuffer,
-                operationContext.dataLength);
-        operationContext.dataOffset += operationContext.dataLength;
+        os_memmove(opCtx.message +
+                opCtx.dataOffset,
+                opCtx.dataBuffer,
+                opCtx.dataLength);
+        opCtx.dataOffset += opCtx.dataLength;
     }
 }
 
 void readHeaderFromAPDU() {
-    operationContext.p1 = G_io_apdu_buffer[OFFSET_P1];
-    operationContext.p2 = G_io_apdu_buffer[OFFSET_P2];
-    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-    operationContext.dataLength =
+    opCtx.p1 = G_io_apdu_buffer[OFFSET_P1];
+    opCtx.p2 = G_io_apdu_buffer[OFFSET_P2];
+    opCtx.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+    opCtx.dataLength =
         (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
         (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
 }
 
 void readDataFromMultiAPDU() {
     // First APDU -
-    if (operationContext.p1 == P1_FIRST) {
+    if (opCtx.p1 == P1_FIRST) {
         // First APDU contains total transaction length
-        operationContext.transactionLength = operationContext.dataLength;
+        opCtx.transactionLength = opCtx.dataLength;
 
-        if (operationContext.p2 == P2_MULTI_TX) {
-            operationContext.dataLength = MAX_CHUNK_SIZE;
+        if (opCtx.p2 == P2_MULTI_TX) {
+            opCtx.dataLength = MAX_CHUNK_SIZE;
         }
 
-        operationContext.dataOffset = 0;
-        operationContext.isDataReadComplete = false;
-    } else if (operationContext.p1 != P1_NEXT) {
+        opCtx.dataOffset = 0;
+        opCtx.isDataReadComplete = false;
+    } else if (opCtx.p1 != P1_NEXT) {
         THROW(0x5401);
     }
 
@@ -1062,18 +1063,18 @@ void readDataFromMultiAPDU() {
     checkAndCopyDataToBuffer();
 
     // Check if we have read all the data for this instuction
-    if(operationContext.dataOffset ==
-      operationContext.transactionLength
+    if(opCtx.dataOffset ==
+      opCtx.transactionLength
     ) {
-        operationContext.isDataReadComplete = true;
+        opCtx.isDataReadComplete = true;
     }
 }
 
 void hashDataWithBlake2b() {
-    int error = blake2b( operationContext.hashTX,
+    int error = blake2b( opCtx.hashTX,
              32,
-             operationContext.message,
-             operationContext.transactionLength,
+             opCtx.message,
+             opCtx.transactionLength,
              NULL,
              0 );
     if(error == -1) {
@@ -1093,15 +1094,15 @@ void hashDataWithBlake2b() {
 void io_exchange_address() {
     uint32_t tx = 0;
 
-    G_io_apdu_buffer[tx++] = 32; // + sizeof(operationContext.chainCode);
+    G_io_apdu_buffer[tx++] = 32; // + sizeof(opCtx.chainCode);
 
     uint8_t publicKey[32];
     // copy public key little endian to big endian
     uint8_t i;
     for (i = 0; i < 32; i++) {
-        publicKey[i] = operationContext.publicKey.W[64 - i];
+        publicKey[i] = opCtx.publicKey.W[64 - i];
     }
-    if ((operationContext.publicKey.W[32] & 1) != 0) {
+    if ((opCtx.publicKey.W[32] & 1) != 0) {
         publicKey[31] |= 0x80;
     }
 
@@ -1109,12 +1110,12 @@ void io_exchange_address() {
 
     tx += 32;
 
-    if(operationContext.getWalletRecoveryPassphrase) {
+    if(opCtx.getWalletRecoveryPassphrase) {
         // output chain code
         os_memmove(G_io_apdu_buffer + tx,
-                   operationContext.chainCode,
-                   sizeof(operationContext.chainCode));
-        tx += sizeof(operationContext.chainCode);
+                   opCtx.chainCode,
+                   sizeof(opCtx.chainCode));
+        tx += sizeof(opCtx.chainCode);
     }
 
     G_io_apdu_buffer[tx++] = 0x90;
@@ -1127,13 +1128,13 @@ void io_exchange_address() {
 void io_exchange_set_tx() {
     uint32_t tx = 0;
     G_io_apdu_buffer[tx++] = tx_sign_counter;
-    G_io_apdu_buffer[tx++] = operationContext.finalUTXOCount;
+    G_io_apdu_buffer[tx++] = opCtx.finalUTXOCount;
 
-    for (int i=0; i < operationContext.finalUTXOCount; i++ ) {
+    for (int i=0; i < opCtx.finalUTXOCount; i++ ) {
 
         os_memmove(G_io_apdu_buffer + tx, &tx_ui.ui_addresses[i], MAX_CHAR_PER_ADDR -1 );
         tx += MAX_CHAR_PER_ADDR - 1;
-        os_memmove(G_io_apdu_buffer + tx, &operationContext.txAmountData[i], 8);
+        os_memmove(G_io_apdu_buffer + tx, &opCtx.txAmountData[i], 8);
         tx += 8;
     }
 
@@ -1155,9 +1156,9 @@ void io_exchange_signing_aborted() {
 
 void resetSigningTx() {
     tx_ui.tx_ui_step = -1;
-    os_memset(operationContext.message, 0, MAX_TX_SIZE);
-    operationContext.transactionLength = 0;
-    os_memset(operationContext.hashTX, 0, 32);
+    os_memset(opCtx.message, 0, MAX_TX_SIZE);
+    opCtx.transactionLength = 0;
+    os_memset(opCtx.hashTX, 0, 32);
     is_tx_set = false;
     tx_sign_counter = 0;
 }
@@ -1192,7 +1193,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e) {
 
 unsigned int io_seproxyhal_touch_preview_ok(const bagl_element_t *e) {
     tx_ui.tx_ui_step = 0;
-    tx_ui.otx_count = operationContext.finalUTXOCount;
+    tx_ui.otx_count = opCtx.finalUTXOCount;
 
     prepare_tx_preview_ui();
 
@@ -1259,7 +1260,7 @@ unsigned int prepare_tx_preview_ui() {
         ada_print_amount(fee, tx_ui.ui_value, 32);
     } else if(tx_ui.tx_ui_step % 2 == 0) { // EVEN TX AMOUNT
         os_memmove(tx_ui.ui_label, ui_strings[0], 32);
-        ada_print_amount(operationContext.txAmountData[tx_amount_index], tx_ui.ui_value, 32);
+        ada_print_amount(opCtx.txAmountData[tx_amount_index], tx_ui.ui_value, 32);
     } else {  // ODD TX ADDRESS
         os_memmove(tx_ui.ui_label, ui_strings[1], 32);
         os_memmove(tx_ui.ui_value, tx_ui.ui_addresses[tx_address_index], MAX_CHAR_PER_ADDR);
@@ -1287,7 +1288,7 @@ unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e) {
     resetSigningTx();
 
     uint32_t tx = 0;
-    G_io_apdu_buffer[tx++] = operationContext.finalUTXOCount;
+    G_io_apdu_buffer[tx++] = opCtx.finalUTXOCount;
     G_io_apdu_buffer[tx++] = 0x00;
 
     G_io_apdu_buffer[tx++] = 0x90;
@@ -1408,34 +1409,34 @@ void sample_main(void) {
 
                 #ifdef INS_GET_PUBLIC_KEY_FUNC
                 case INS_GET_PUBLIC_KEY: {
-                    operationContext.p1 = G_io_apdu_buffer[OFFSET_P1];
-                    operationContext.p2 = G_io_apdu_buffer[OFFSET_P2];
-                    operationContext.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+                    opCtx.p1 = G_io_apdu_buffer[OFFSET_P1];
+                    opCtx.p2 = G_io_apdu_buffer[OFFSET_P2];
+                    opCtx.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
 
-                    if(operationContext.p1 == P1_RECOVERY_PASSPHRASE) {
-                        operationContext.getWalletRecoveryPassphrase = true;
-                        operationContext.pathLength = ADA_ROOT_BIP32_PATH_LEN;
+                    if(opCtx.p1 == P1_RECOVERY_PASSPHRASE) {
+                        opCtx.getWalletRecoveryPassphrase = true;
+                        opCtx.pathLength = ADA_ROOT_BIP32_PATH_LEN;
 
-                        operationContext.bip32Path[0] = BIP_44 |
+                        opCtx.bip32Path[0] = BIP_44 |
                                                           HARDENED_BIP32;
-                        operationContext.bip32Path[1] = ADA_COIN_TYPE |
+                        opCtx.bip32Path[1] = ADA_COIN_TYPE |
                                                           HARDENED_BIP32;
 
-                    } else if (operationContext.p1 == P1_ADDRESS_PUB_KEY) {
-                        operationContext.getWalletRecoveryPassphrase = false;
-                        operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
+                    } else if (opCtx.p1 == P1_ADDRESS_PUB_KEY) {
+                        opCtx.getWalletRecoveryPassphrase = false;
+                        opCtx.pathLength = ADA_ADDR_BIP32_PATH_LEN;
 
-                        operationContext.bip32Path[0] = BIP_44 |
+                        opCtx.bip32Path[0] = BIP_44 |
                                                           HARDENED_BIP32;
-                        operationContext.bip32Path[1] = ADA_COIN_TYPE |
+                        opCtx.bip32Path[1] = ADA_COIN_TYPE |
                                                           HARDENED_BIP32;
-                        operationContext.bip32Path[2] = ADA_ACCOUNT |
+                        opCtx.bip32Path[2] = ADA_ACCOUNT |
                                                           HARDENED_BIP32;
-                        operationContext.bip32Path[3] = (operationContext.dataBuffer[0] << 24) |
-                                                        (operationContext.dataBuffer[1] << 16) |
-                                                        (operationContext.dataBuffer[2] << 8)  |
-                                                        (operationContext.dataBuffer[3]);
-                        if(operationContext.bip32Path[3] < HARDENED_BIP32) {
+                        opCtx.bip32Path[3] = (opCtx.dataBuffer[0] << 24) |
+                                                        (opCtx.dataBuffer[1] << 16) |
+                                                        (opCtx.dataBuffer[2] << 8)  |
+                                                        (opCtx.dataBuffer[3]);
+                        if(opCtx.bip32Path[3] < HARDENED_BIP32) {
                             //TODO: Set error code
                             THROW(0x5201);
                         }
@@ -1451,7 +1452,7 @@ void sample_main(void) {
                                              &privateKey);
 
                     cx_ecfp_generate_pair(CX_CURVE_Ed25519,
-                                          &operationContext.publicKey,
+                                          &opCtx.publicKey,
                                           &privateKey, 1);
 
                     os_memset(&privateKey, 0, sizeof(privateKey));
@@ -1479,16 +1480,16 @@ void sample_main(void) {
 
                     readDataFromMultiAPDU();
 
-                    if(operationContext.isDataReadComplete) {
+                    if(opCtx.isDataReadComplete) {
 
                         hashDataWithBlake2b();
 
                     }
 
                     uint32_t tx = 0;
-                    if(operationContext.isDataReadComplete) {
+                    if(opCtx.isDataReadComplete) {
                         G_io_apdu_buffer[tx++] = 0x20;
-                        os_memmove(G_io_apdu_buffer + tx, operationContext.hashTX, 32);
+                        os_memmove(G_io_apdu_buffer + tx, opCtx.hashTX, 32);
                         tx += 32;
                     }
 
@@ -1517,7 +1518,7 @@ void sample_main(void) {
 
                     readDataFromMultiAPDU();
 
-                    if(operationContext.isDataReadComplete) {
+                    if(opCtx.isDataReadComplete) {
 
                         parse_cbor_transaction();
 
@@ -1567,19 +1568,19 @@ void sample_main(void) {
                     readHeaderFromAPDU();
 
                     uint32_t address_index;
-                    parse_uint32(&address_index, operationContext.dataBuffer);
+                    parse_uint32(&address_index, opCtx.dataBuffer);
 
                     // Set BIP32 ADA path with address index
-                    operationContext.pathLength = ADA_ADDR_BIP32_PATH_LEN;
-                    operationContext.bip32Path[0] = BIP_44 |
+                    opCtx.pathLength = ADA_ADDR_BIP32_PATH_LEN;
+                    opCtx.bip32Path[0] = BIP_44 |
                                                       HARDENED_BIP32;
-                    operationContext.bip32Path[1] = ADA_COIN_TYPE |
+                    opCtx.bip32Path[1] = ADA_COIN_TYPE |
                                                       HARDENED_BIP32;
-                    operationContext.bip32Path[2] = 0 |
+                    opCtx.bip32Path[2] = 0 |
                                                       HARDENED_BIP32;
-                    operationContext.bip32Path[3] = address_index;
+                    opCtx.bip32Path[3] = address_index;
 
-                    if(operationContext.bip32Path[3] < HARDENED_BIP32) {
+                    if(opCtx.bip32Path[3] < HARDENED_BIP32) {
                         //TODO: Set error code
                         THROW(0x5201);
                     }
@@ -1597,7 +1598,7 @@ void sample_main(void) {
 
                     tx = cx_eddsa_sign(
                         &privateKey, NULL, CX_LAST, CX_SHA512,
-                        operationContext.hashTX,
+                        opCtx.hashTX,
                         32,
                         G_io_apdu_buffer);
 
@@ -1657,28 +1658,28 @@ void sample_main(void) {
 
                   readDataFromMultiAPDU();
 
-                  if(operationContext.isDataReadComplete) {
+                  if(opCtx.isDataReadComplete) {
                       parse_cbor_transaction();
                   }
 
                   uint32_t tx = 0;
 
-                  if(operationContext.isDataReadComplete) {
+                  if(opCtx.isDataReadComplete) {
 
                       // Output total Tx inputs
                       G_io_apdu_buffer[tx++] = tx_sign_counter;
                       // Output total Tx outputs
-                      G_io_apdu_buffer[tx++] = operationContext.finalUTXOCount;
+                      G_io_apdu_buffer[tx++] = opCtx.finalUTXOCount;
 
-                      for (int i=0; i < operationContext.finalUTXOCount; i++ ) {
+                      for (int i=0; i < opCtx.finalUTXOCount; i++ ) {
 
                           os_memmove(G_io_apdu_buffer + tx,
-                            &operationContext.addressData[i], 4);
+                            &opCtx.addressData[i], 4);
                           tx += 4;
                           G_io_apdu_buffer[tx++] = 0xFF;
 
                           os_memmove(G_io_apdu_buffer + tx,
-                            &operationContext.txAmountData[i], 8);
+                            &opCtx.txAmountData[i], 8);
                           tx += 8;
                           G_io_apdu_buffer[tx++] = 0xFF;
                       }
@@ -1704,23 +1705,23 @@ void sample_main(void) {
 
                     readHeaderFromAPDU();
 
-                    if(operationContext.dataLength > MAX_ADDR_IN_LENGTH) {
+                    if(opCtx.dataLength > MAX_ADDR_IN_LENGTH) {
                         THROW(0x5801);
                     }
 
-                    os_memset(operationContext.address_base58, 0, MAX_ADDR_OUT_LENGTH);
+                    os_memset(opCtx.address_base58, 0, MAX_ADDR_OUT_LENGTH);
 
                     unsigned char address_length =
-                      ada_encode_base58(operationContext.dataBuffer,
-                                        operationContext.dataLength,
-                                        operationContext.address_base58,
+                      ada_encode_base58(opCtx.dataBuffer,
+                                        opCtx.dataLength,
+                                        opCtx.address_base58,
                                         MAX_ADDR_OUT_LENGTH);
 
                     // Display Address
                     /*
                     os_memset(tx_ui.ui_label, 0, 32);
                     os_memset(tx_ui.ui_value, 0, 32);
-                    os_memmove(tx_ui.ui_value, operationContext.address_base58, 5);
+                    os_memmove(tx_ui.ui_value, opCtx.address_base58, 5);
                     os_memmove(tx_ui.ui_value + 5, "...", 3);
                     tx_ui.ui_value[8] = '\0';
                     UX_DISPLAY(bagl_ui_preview_tx_nanos, NULL);
@@ -1732,7 +1733,7 @@ void sample_main(void) {
 
                     G_io_apdu_buffer[tx++] = address_length;
 
-                    os_memmove(G_io_apdu_buffer + tx, operationContext.address_base58, address_length);
+                    os_memmove(G_io_apdu_buffer + tx, opCtx.address_base58, address_length);
                     tx += address_length;
                     G_io_apdu_buffer[tx++] = 0x90;
                     G_io_apdu_buffer[tx++] = 0x00;
