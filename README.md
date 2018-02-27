@@ -1,22 +1,54 @@
-# Cardano App
+# Cardano Ledger App
 
-> A simple Cardano SL app for Ledger Nano S, supporting ed25519 derivation and keys.
+Cardano Ledger App for Ledger Nano S
 
-## Compatibility
+* Ledger ed25519 derivation and keys (Not Cardano implementation)
+* CBOR decode transactions
+* Blake2b hashing of Tx for signing
+
+## Companion APIs
 
 This app is compatible with [this fork](https://github.com/HiddenField/cardano-ledger-node-js-api) of the **cardano-ledger-node-js-api** client.
 
 ## Current Instruction Set
 
-| Get Public Key for a given derivation path | INS_GET_PUBLIC_KEY | 0x02 |
-| Generate random public key on 44'/1815'/[WALLET_INDEX]'/0'| INS_GET_RND_PUB_KEY | 0x0C |
-| Calculates and returns the Wallet Index | INS_GET_WALLET_INDEX | 0x0E |
+Instruction | APDU | Build | Description
+--- | --- | --- | ---
+INS_GET_PUBLIC_KEY | 0x01 | PROD | Get Public Key for a given derivation index
+INS_SET_TX | 0x02 | PROD | Set the transaction to be signed
+INS_SIGN_TX | 0x03 | PROD | Sign transaction with a given index
+INS_APP_INFO | 0x04 | PROD | Returns the app version numbering
+INS_BLAKE2B_TEST | 0x07 | TEST | Hash a given value
+INS_BASE58_ENCODE_TEST | 0x08 | TEST | Base58 encode a given value
+INS_CBOR_DECODE_TEST | 0x09 | TEST | Decode a given transaction
 
-## APDU Breakdown
+## Detailed APDU Breakdown
 
 See [doc/cardanoapp.asc](doc/cardanoapp.asc)
 
 ## Building
+
+### Production
+
+`make clean load`
+
+Build the app with the PROD API only.
+
+### Test API
+
+`make clean test`
+
+Builds the app with the TEST API only. Useful for testing underlying implementations used in the production functions.
+
+### Headless API - Non production
+
+`make clean headless`
+
+Build the PROD API bypassing the UI. [**WARNING!** Bypasses user confirmation screens. Not to be used for production builds].
+
+## Setup
+
+**NOTE: There are known issues with the current LedgerBlue python sdk (described below) that can cause errors in these steps.** Please ensure you are using the correct version of the SDK.  [See - Known Issues](#known-issues).
 
 Environment setup and developer documentation is succinctly provided in Ledger’s [Read the Docs](http://ledger.readthedocs.io/en/latest/). Fix’s Vagrant project is also very useful for setting up development environments off linux using [Ledger Vagrant](https://github.com/fix/ledger-vagrant).
 
@@ -74,7 +106,7 @@ To set up your environment on Mac, using [Vagrant](https://www.vagrantup.com) is
   ```
   This command will output the keypair onto the screen. Highlight the private key (after the colon) - Command + C
   ```bash
-    Public key : 04180cf57eb2afc56ea26cc13a3a01839943a03b40d32110d401553a78a814b40b3c863f96e04f9a7710335fe920b3d0bec21529480341b381b21d7bc617b02160
+    Public key: 04180cf57eb2afc56ea26cc13a3a01839943a03b40d32110d401553a78a814b40b3c863f96e04f9a7710335fe920b3d0bec21529480341b381b21d7bc617b02160
     Private key: d30b3e3d25dc84cec995d1163b21a970e32879a728eccf29fd455b9a70cbc3d1
   ```
   Save private key into file sign.key in root directory
@@ -149,6 +181,7 @@ The build process is managed with [Make](https://www.gnu.org/software/make/).
 * `build-test`: Build obj and bin test api artefacts without loading
 * `sign`: Sign current app.hex with CA private key
 * `deploy`: Load the current app.hex onto the Ledger device
+* `seed` : Seeds identity 1 on the device to a predetermined mnemonic. Intended for automated testing purposes. [**WARNING!** This will overwrite the identity on the device]
 
 See `Makefile` for list of included functions.
 
@@ -165,4 +198,4 @@ Use clean when switching between development and testing APIs to ensure correct 
 ### Deploying Release
 
 Releases will need to be given to Ledger for signing with their private key.
-This will allow the application to be installed without warning prompts on any Ledger device.
+This will allow the application to be installed via the Ledger App Manager without warning prompts on any Ledger device.
