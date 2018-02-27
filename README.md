@@ -6,6 +6,8 @@ Cardano Ledger App for Ledger Nano S
 * CBOR decode transactions
 * Blake2b hashing of Tx for signing
 
+Please read the [current issues](https://github.com/HiddenField/ledger-cardano-app/wiki) on the wiki.
+
 ## Companion APIs
 
 This app is compatible with [this fork](https://github.com/HiddenField/cardano-ledger-node-js-api) of the **cardano-ledger-node-js-api** client.
@@ -54,7 +56,7 @@ Environment setup and developer documentation is succinctly provided in Ledgerâ€
 
 ### Mac OSX
 
-To set up your environment on Mac, using [Vagrant](https://www.vagrantup.com) is recommended^[1].
+To set up your environment on Mac, using [Vagrant](https://www.vagrantup.com) is recommended.
 
 
 1. Install [VirtualBox](https://www.virtualbox.org/) and [Vagrant](https://www.vagrantup.com/):
