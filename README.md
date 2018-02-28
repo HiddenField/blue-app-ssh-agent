@@ -30,6 +30,10 @@ See [doc/cardanoapp.asc](doc/cardanoapp.asc)
 
 ## Building
 
+Make sure to delete any existing Cardano app off the device first.
+
+`make delete`
+
 ### Production
 
 `make clean load`
@@ -47,6 +51,11 @@ Builds the app with the TEST API only. Useful for testing underlying implementat
 `make clean headless`
 
 Build the PROD API bypassing the UI. [**WARNING!** Bypasses user confirmation screens. Not to be used for production builds].
+
+### Deploying Release
+
+Releases will need to be given to Ledger for signing with their private key.
+This will allow the application to be installed via the Ledger App Manager without warning prompts on any Ledger device.
 
 ## Setup
 
@@ -187,17 +196,28 @@ The build process is managed with [Make](https://www.gnu.org/software/make/).
 
 See `Makefile` for list of included functions.
 
-### Deploying Development API
+## Development Cycle
 
-`make clean load`
+`$ vagrant up` Start the vm
+`$ vagrant ssh` SSH into the vm
+`vagrant~$ cd [GIT_REPO_DIR]` goto app dir
+`vagrant~$ make delete` delete previous app off device
+`vagrant~$ make clean load` or `$> make clean test` or `$> make clean headless`
+`vagrant~$ exit` exit ssh session
+`$ vagrant suspend` suspend vm, get usb host back
 
 Use clean when switching between development and testing APIs to ensure correct interfaces are built.
 
-### Deploying Test API
+## Troubleshooting
 
-`make clean test`
+### make delete/load/test/headless
 
-### Deploying Release
+* `ledgerblue.commException.CommException: Exception : No dongle found
+make: *** [load] Error 1` : Device not unlocked; Device not connected; VM does not have control of USB port
 
-Releases will need to be given to Ledger for signing with their private key.
-This will allow the application to be installed via the Ledger App Manager without warning prompts on any Ledger device.
+### make load/test/headless
+
+* `ledgerblue.commException.CommException: Exception : Invalid status 6a80`: Cardano app already installed on device - run `make delete`
+
+### make delete
+`Invalid status 6e00`: App is running
