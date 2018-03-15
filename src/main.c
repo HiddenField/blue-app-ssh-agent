@@ -83,7 +83,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define OFFSET_P1 2
 #define OFFSET_P2 3
 #define OFFSET_LC 4
-#define OFFSET_CDATA 8
+#define OFFSET_CDATA 5
 
 #define CBOR_7              0xE0  /* type 7 (float and other types) */
 #define CBOR_ARRAY          0x80  /* type 4 */
@@ -1010,9 +1010,7 @@ void readHeaderFromAPDU() {
     opCtx.p1 = G_io_apdu_buffer[OFFSET_P1];
     opCtx.p2 = G_io_apdu_buffer[OFFSET_P2];
     opCtx.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-    opCtx.dataLength =
-        (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
-        (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
+    opCtx.dataLength = G_io_apdu_buffer[4];
 }
 
 void readDataFromMultiAPDU() {
