@@ -48,7 +48,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 
 #define MAX_BIP32_PATH 10
 #define MAX_USER_NAME 20
-#define MAX_CHUNK_SIZE 56
+#define MAX_CHUNK_SIZE 59
 #define MAX_TX_SIZE 1023
 #define MAX_TX_IO 6
 #define MAX_CHAR_PER_ADDR 13
