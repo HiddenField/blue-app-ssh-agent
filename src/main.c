@@ -73,9 +73,10 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 
 #define P1_FIRST 0x01
 #define P1_NEXT 0x02
+#define P1_LAST 0x03
 #define P1_RECOVERY_PASSPHRASE 0x01
 #define P1_ADDRESS_PUB_KEY 0x02
-#define P2_SINGLE_TX 0x00
+#define P2_SINGLE_TX 0x01
 #define P2_MULTI_TX 0x02
 
 #define OFFSET_CLA 0
@@ -1014,30 +1015,16 @@ void readHeaderFromAPDU() {
 }
 
 void readDataFromMultiAPDU() {
-    // First APDU -
     if (opCtx.p1 == P1_FIRST) {
-        // First APDU contains total transaction length
-        opCtx.transactionLength = opCtx.dataLength;
-
-        if (opCtx.p2 == P2_MULTI_TX) {
-            opCtx.dataLength = MAX_CHUNK_SIZE;
-        }
-
+        opCtx.transactionLength = 0;
         opCtx.dataOffset = 0;
-        opCtx.isDataReadComplete = false;
-    } else if (opCtx.p1 != P1_NEXT) {
+    } else if (opCtx.p1 != P1_NEXT && opCtx.p1 != P1_LAST) {
         THROW(0x5401);
     }
 
-    // Other APDU Packets - Check buffers have space
+    opCtx.transactionLength += opCtx.dataLength;
     checkAndCopyDataToBuffer();
-
-    // Check if we have read all the data for this instuction
-    if(opCtx.dataOffset ==
-      opCtx.transactionLength
-    ) {
-        opCtx.isDataReadComplete = true;
-    }
+    opCtx.isDataReadComplete = opCtx.p2 == P2_SINGLE_TX || opCtx.p1 == P1_LAST;
 }
 
 void hashDataWithBlake2b() {
