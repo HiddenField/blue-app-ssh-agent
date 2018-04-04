@@ -1011,7 +1011,7 @@ void readHeaderFromAPDU() {
     opCtx.p1 = G_io_apdu_buffer[OFFSET_P1];
     opCtx.p2 = G_io_apdu_buffer[OFFSET_P2];
     opCtx.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-    opCtx.dataLength = G_io_apdu_buffer[4];
+    opCtx.dataLength = G_io_apdu_buffer[OFFSET_LC];
 }
 
 void readDataFromMultiAPDU() {
@@ -1590,17 +1590,11 @@ void sample_main(void) {
                 #ifdef INS_APP_INFO_FUNC
                 case INS_APP_INFO: {
 
-                    uint32_t tx = 0;
-
-                    G_io_apdu_buffer[tx++] = LEDGER_MAJOR_VERSION;
-                    G_io_apdu_buffer[tx++] = LEDGER_MINOR_VERSION;
-                    G_io_apdu_buffer[tx++] = LEDGER_PATCH_VERSION;
-
-                    G_io_apdu_buffer[tx++] = 0x90;
-                    G_io_apdu_buffer[tx++] = 0x00;
-                    // Send back the response, do not restart the event loop
-                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-                    // Display back the original UX
+                    G_io_apdu_buffer[0] = LEDGER_MAJOR_VERSION;
+                    G_io_apdu_buffer[1] = LEDGER_MINOR_VERSION;
+                    G_io_apdu_buffer[2] = LEDGER_PATCH_VERSION;
+                    tx = 3;
+                    THROW(0x9000);
                     ui_idle();
 
                 }
