@@ -48,7 +48,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 
 #define MAX_BIP32_PATH 10
 #define MAX_USER_NAME 20
-#define MAX_CHUNK_SIZE 56
+#define MAX_CHUNK_SIZE 59
 #define MAX_TX_SIZE 1023
 #define MAX_TX_IO 6
 #define MAX_CHAR_PER_ADDR 13
@@ -73,9 +73,10 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 
 #define P1_FIRST 0x01
 #define P1_NEXT 0x02
+#define P1_LAST 0x03
 #define P1_RECOVERY_PASSPHRASE 0x01
 #define P1_ADDRESS_PUB_KEY 0x02
-#define P2_SINGLE_TX 0x00
+#define P2_SINGLE_TX 0x01
 #define P2_MULTI_TX 0x02
 
 #define OFFSET_CLA 0
@@ -83,7 +84,7 @@ unsigned int io_seproxyhal_touch_show_preview(const bagl_element_t *e);
 #define OFFSET_P1 2
 #define OFFSET_P2 3
 #define OFFSET_LC 4
-#define OFFSET_CDATA 8
+#define OFFSET_CDATA 5
 
 #define CBOR_7              0xE0  /* type 7 (float and other types) */
 #define CBOR_ARRAY          0x80  /* type 4 */
@@ -1010,36 +1011,20 @@ void readHeaderFromAPDU() {
     opCtx.p1 = G_io_apdu_buffer[OFFSET_P1];
     opCtx.p2 = G_io_apdu_buffer[OFFSET_P2];
     opCtx.dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-    opCtx.dataLength =
-        (G_io_apdu_buffer[4] << 24) | (G_io_apdu_buffer[5] << 16) |
-        (G_io_apdu_buffer[6] << 8) | (G_io_apdu_buffer[7]);
+    opCtx.dataLength = G_io_apdu_buffer[OFFSET_LC];
 }
 
 void readDataFromMultiAPDU() {
-    // First APDU -
     if (opCtx.p1 == P1_FIRST) {
-        // First APDU contains total transaction length
-        opCtx.transactionLength = opCtx.dataLength;
-
-        if (opCtx.p2 == P2_MULTI_TX) {
-            opCtx.dataLength = MAX_CHUNK_SIZE;
-        }
-
+        opCtx.transactionLength = 0;
         opCtx.dataOffset = 0;
-        opCtx.isDataReadComplete = false;
-    } else if (opCtx.p1 != P1_NEXT) {
+    } else if (opCtx.p1 != P1_NEXT && opCtx.p1 != P1_LAST) {
         THROW(0x5401);
     }
 
-    // Other APDU Packets - Check buffers have space
+    opCtx.transactionLength += opCtx.dataLength;
     checkAndCopyDataToBuffer();
-
-    // Check if we have read all the data for this instuction
-    if(opCtx.dataOffset ==
-      opCtx.transactionLength
-    ) {
-        opCtx.isDataReadComplete = true;
-    }
+    opCtx.isDataReadComplete = opCtx.p2 == P2_SINGLE_TX || opCtx.p1 == P1_LAST;
 }
 
 void hashDataWithBlake2b() {
@@ -1605,17 +1590,11 @@ void sample_main(void) {
                 #ifdef INS_APP_INFO_FUNC
                 case INS_APP_INFO: {
 
-                    uint32_t tx = 0;
-
-                    G_io_apdu_buffer[tx++] = LEDGER_MAJOR_VERSION;
-                    G_io_apdu_buffer[tx++] = LEDGER_MINOR_VERSION;
-                    G_io_apdu_buffer[tx++] = LEDGER_PATCH_VERSION;
-
-                    G_io_apdu_buffer[tx++] = 0x90;
-                    G_io_apdu_buffer[tx++] = 0x00;
-                    // Send back the response, do not restart the event loop
-                    io_exchange(CHANNEL_APDU | IO_RETURN_AFTER_TX, tx);
-                    // Display back the original UX
+                    G_io_apdu_buffer[0] = LEDGER_MAJOR_VERSION;
+                    G_io_apdu_buffer[1] = LEDGER_MINOR_VERSION;
+                    G_io_apdu_buffer[2] = LEDGER_PATCH_VERSION;
+                    tx = 3;
+                    THROW(0x9000);
                     ui_idle();
 
                 }
